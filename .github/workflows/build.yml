@@ -2,8 +2,8 @@
 
 on:
   push:
-    tags: ['v*']           # Запускается при создании тега v1.0.0, v1.1.0 и т.д.
-
+    tags: ['v*']
+  workflow_dispatch:    # Добавляем ручной запуск
 jobs:
   build-linux:
     name: Build .deb package for Linux
