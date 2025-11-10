@@ -32,7 +32,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Core 
     Quick 
     Qml 
-    LabsPlatform  # Добавляем для Qt.labs.platform
+    
     Sql
     ${POSTGRESQL_LIBRARY}
 )
@@ -75,7 +75,7 @@ target_link_libraries(FridgeManager
     Qt6::Core
     Qt6::Quick
     Qt6::Qml
-    Qt6::LabsPlatform
+   
     Qt6::Sql  
     
     
