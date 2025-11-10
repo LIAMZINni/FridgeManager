@@ -16,28 +16,37 @@ jobs:
     - name: 🛠️ Install build dependencies
       run: |
         sudo apt-get update
+        
+        # Устанавливаем PostgreSQL репозиторий
+        sudo apt-get install -y wget gnupg
+        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+        echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+        sudo apt-get update
+        
+        # Устанавливаем пакеты БЕЗ postgresql-server-dev-all
         sudo apt-get install -y \
           build-essential \
           cmake \
           qt6-base-dev \
           qt6-declarative-dev \
-          postgresql-server-dev-all \
           libpq-dev \
+          libpq5 \
+          postgresql-client \
           devscripts \
           debhelper \
           dpkg-dev
-    
+
     - name: 🔧 Configure project
       run: |
         mkdir build
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=Release
-    
+
     - name: 🏗️ Build project
       run: |
         cd build
         make -j$(nproc)
-    
+
     - name: 📦 Create .deb package structure
       run: |
         # Создаем структуру пакета
@@ -56,7 +65,7 @@ jobs:
         
         # Устанавливаем права
         chmod 755 package/usr/bin/fridgemanager
-    
+
     - name: 🎁 Build .deb package
       run: |
         dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
@@ -64,7 +73,7 @@ jobs:
         # Показываем информацию о пакете
         dpkg --info fridgemanager_1.0.0_amd64.deb
         echo "📦 Размер пакета: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
-    
+
     - name: 🏷️ Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:

@@ -1,4 +1,3 @@
-# package/DEBIAN/control
 Package: fridgemanager
 Version: 1.0.0
 Architecture: amd64
