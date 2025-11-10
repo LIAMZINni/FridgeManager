@@ -34,7 +34,7 @@ bool DatabaseManager::connectToDatabase()
     d->db.setPort(5432);
     d->db.setDatabaseName("fridgemanager");
     d->db.setUserName("postgres");
-    d->db.setPassword("123"); // ЗАМЕНИ НА СВОЙ ПАРОЛЬ!
+    d->db.setPassword("123"); 
 
     if (!d->db.open()) {
         d->lastError = d->db.lastError().text();

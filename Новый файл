@@ -1,9 +1,9 @@
-п»ї# CMakeList.txt: РїСЂРѕРµРєС‚ CMake РґР»СЏ FridgeManager; РІРєР»СЋС‡РёС‚Рµ РёСЃС…РѕРґРЅС‹Р№ РєРѕРґ Рё РѕРїСЂРµРґРµР»РµРЅРёСЏ,
-# СѓРєР°Р¶РёС‚Рµ Р·РґРµСЃСЊ Р»РѕРіРёРєСѓ РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕРіРѕ РїСЂРѕРµРєС‚Р°.
+# CMakeList.txt: проект CMake для FridgeManager; включите исходный код и определения,
+# укажите здесь логику для конкретного проекта.
 #
 cmake_minimum_required (VERSION 3.16)
 
-# Р’РєР»СЋС‡РµРЅРёРµ РіРѕСЂСЏС‡РµР№ РїРµСЂРµР·Р°РіСЂСѓР·РєРё РґР»СЏ РєРѕРјРїРёР»СЏС‚РѕСЂРѕРІ MSVC, РµСЃР»Рё РїРѕРґРґРµСЂР¶РёРІР°РµС‚СЃСЏ.
+# Включение горячей перезагрузки для компиляторов MSVC, если поддерживается.
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
@@ -11,12 +11,12 @@ endif()
 
 project ("FridgeManager")
 
-# РќР°СЃС‚СЂРѕР№РєР° СЃС‚Р°РЅРґР°СЂС‚Р° C++
+# Настройка стандарта C++
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
-# Р’РєР»СЋС‡Р°РµРј Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєСѓСЋ РѕР±СЂР°Р±РѕС‚РєСѓ Qt (MOC, UIC, RCC)
+# Включаем автоматическую обработку Qt (MOC, UIC, RCC)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 #set(CMAKE_AUTORCC ON)
@@ -25,9 +25,9 @@ set(CMAKE_AUTOUIC ON)
 
 set(Qt6_DIR "D:/Qt/6.10.0/msvc2022_64/lib/cmake/Qt6")
 
-# РЇРІРЅРѕ СѓРєР°Р·С‹РІР°РµРј РїСѓС‚Рё Рє Qt
+# Явно указываем пути к Qt
 set(CMAKE_PREFIX_PATH "D:/Qt/6.10.0/msvc2022_64")
-# РС‰РµРј Qt6 (РІРµСЂСЃРёСЏ 6.10)
+# Ищем Qt6 (версия 6.10)
 find_package(Qt6 REQUIRED COMPONENTS 
     Core 
     Quick 
@@ -37,7 +37,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     ${POSTGRESQL_LIBRARY}
 )
 
-# Р СѓС‡РЅРѕРµ СѓРєР°Р·Р°РЅРёРµ РїСѓС‚РµР№ PostgreSQL (Р—РђРњР•РќР РќРђ РЎР’РћР™ РџРЈРўР¬!)
+# Ручное указание путей PostgreSQL (ЗАМЕНИ НА СВОЙ ПУТЬ!)
 set(POSTGRESQL_ROOT "D:/posgesSQL")
 set(POSTGRESQL_INCLUDE_DIR "${POSTGRESQL_ROOT}/include")
 set(POSTGRESQL_LIBRARY "${POSTGRESQL_ROOT}/lib/libpq.lib")
@@ -46,7 +46,7 @@ message(STATUS "PostgreSQL include: ${POSTGRESQL_INCLUDE_DIR}")
 message(STATUS "PostgreSQL library: ${POSTGRESQL_LIBRARY}")
 
 
-# РџСЂРѕРІРµСЂСЏРµРј СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ С„Р°Р№Р»РѕРІ
+# Проверяем существование файлов
 if(EXISTS "${POSTGRESQL_INCLUDE_DIR}" AND EXISTS "${POSTGRESQL_LIBRARY}")
     message(STATUS "PostgreSQL found at: ${POSTGRESQL_ROOT}")
     set(PostgreSQL_FOUND TRUE)
@@ -62,7 +62,7 @@ endif()
 
 
 
-# Р”РѕР±Р°РІСЊС‚Рµ РёСЃС‚РѕС‡РЅРёРє РІ РёСЃРїРѕР»РЅСЏРµРјС‹Р№ С„Р°Р№Р» СЌС‚РѕРіРѕ РїСЂРѕРµРєС‚Р°.
+# Добавьте источник в исполняемый файл этого проекта.
 add_executable (FridgeManager  "DatabaseManager.cpp"   "main.cpp"
     
     "qml.qrc"
@@ -70,7 +70,7 @@ add_executable (FridgeManager  "DatabaseManager.cpp"   "main.cpp"
     
 )
 
-# РџРѕРґРєР»СЋС‡Р°РµРј Qt6 РјРѕРґСѓР»Рё
+# Подключаем Qt6 модули
 target_link_libraries(FridgeManager
     Qt6::Core
     Qt6::Quick
@@ -80,18 +80,18 @@ target_link_libraries(FridgeManager
     
     
 )
-# Р”Р»СЏ Qt6 РЅСѓР¶РЅРѕ СѓРєР°Р·Р°С‚СЊ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё
+# Для Qt6 нужно указать дополнительные настройки
 qt_standard_project_setup()
-# Р”РѕР±Р°РІР»СЏРµРј СЂРµСЃСѓСЂСЃС‹
+# Добавляем ресурсы
 qt_add_resources(FridgeManager "qml"
     PREFIX "/"
     FILES
         Main.qml
         QuantityDialog.qml
 )
-# РЈРєР°Р·С‹РІР°РµРј include РґРёСЂРµРєС‚РѕСЂРёРё
+# Указываем include директории
 target_include_directories(FridgeManager PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}  # Р”Р»СЏ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅРЅС‹С… protobuf Р·Р°РіРѕР»РѕРІРєРѕРІ
+    ${CMAKE_CURRENT_BINARY_DIR}  # Для сгенерированных protobuf заголовков
 )
 
 
@@ -101,11 +101,11 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET FridgeManager PROPERTY CXX_STANDARD 20)
 endif()
 
-# TODO: Р”РѕР±Р°РІСЊС‚Рµ С‚РµСЃС‚С‹ Рё С†РµР»РµРІС‹Рµ РѕР±СЉРµРєС‚С‹, РµСЃР»Рё СЌС‚Рѕ РЅРµРѕР±С…РѕРґРёРјРѕ.
+# TODO: Добавьте тесты и целевые объекты, если это необходимо.
 
-# === Р”РћРџРћР›РќРРўР•Р›Р¬РќР«Р• РќРђРЎРўР РћР™РљР Р”Р›РЇ LINUX ===
+# === ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ ДЛЯ LINUX ===
 if(UNIX AND NOT APPLE)
-    # Р”Р»СЏ Linux СѓРєР°Р·С‹РІР°РµРј РіРґРµ РёСЃРєР°С‚СЊ QML С„Р°Р№Р»С‹
+    # Для Linux указываем где искать QML файлы
     target_compile_definitions(FridgeManager PRIVATE 
         QML_PATH="/usr/share/fridgemanager/Main.qml"
     )
