@@ -1,9 +1,16 @@
-﻿name: Build and Release FridgeManager
+name: Build and Release FridgeManager
 
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:    # Добавляем ручной запуск
+  workflow_dispatch:    # ← ДОБАВЛЯЕМ РУЧНОЙ ЗАПУСК
+    inputs:
+      version:
+        description: 'Version for the package'
+        required: true
+        default: '1.0.0'
+        type: string
+
 jobs:
   build-linux:
     name: Build .deb package for Linux
@@ -16,19 +23,12 @@ jobs:
     - name: 🛠️ Install build dependencies
       run: |
         sudo apt-get update
-        
-        # Устанавливаем PostgreSQL репозиторий
-        sudo apt-get install -y wget gnupg
-        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-        echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-        sudo apt-get update
-        
-        # Устанавливаем пакеты БЕЗ postgresql-server-dev-all
         sudo apt-get install -y \
           build-essential \
           cmake \
           qt6-base-dev \
           qt6-declarative-dev \
+          libgl1-mesa-dev \
           libpq-dev \
           libpq5 \
           postgresql-client \
@@ -49,53 +49,50 @@ jobs:
 
     - name: 📦 Create .deb package structure
       run: |
-        # Создаем структуру пакета
         mkdir -p package/DEBIAN
         mkdir -p package/usr/bin
         mkdir -p package/usr/share/fridgemanager
         
-        # Копируем control файл
-        cp package/DEBIAN/control package/DEBIAN/
+        # Используем версию из ручного ввода или тега
+        PACKAGE_VERSION="${{ github.event.inputs.version || github.ref_name }}"
+        echo "Building version: $PACKAGE_VERSION"
         
-        # Копируем исполняемый файл
+        # Создаем control файл с правильной версией
+        cat > package/DEBIAN/control << EOF
+        Package: fridgemanager
+        Version: $PACKAGE_VERSION
+        Architecture: amd64
+        Maintainer: GitHub Actions <actions@github.com>
+        Depends: libqt6core6, libqt6qml6, libqt6quick6, postgresql-client, libpq5
+        Section: utils
+        Priority: optional
+        Description: Restaurant fridge inventory manager
+         Track products in restaurant fridge with PostgreSQL support.
+        EOF
+        
         cp build/FridgeManager package/usr/bin/fridgemanager
-        
-        # Копируем QML файлы
         cp Main.qml package/usr/share/fridgemanager/
-        
-        # Устанавливаем права
         chmod 755 package/usr/bin/fridgemanager
 
     - name: 🎁 Build .deb package
       run: |
-        dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
+        PACKAGE_VERSION="${{ github.event.inputs.version || github.ref_name }}"
+        dpkg-deb --build package fridgemanager_${PACKAGE_VERSION}_amd64.deb
         
         # Показываем информацию о пакете
-        dpkg --info fridgemanager_1.0.0_amd64.deb
-        echo "📦 Размер пакета: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
+        dpkg --info fridgemanager_${PACKAGE_VERSION}_amd64.deb
+        echo "📦 Package created: fridgemanager_${PACKAGE_VERSION}_amd64.deb"
 
     - name: 🏷️ Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          fridgemanager_1.0.0_amd64.deb
-        body: |
-          ## Fridge Manager ${{ github.ref_name }}
-          
-          ### Возможности:
-          - Учет продуктов ресторана
-          - Приход и расход продуктов
-          - Формирование заявок поставщику
-          - Интеграция с PostgreSQL
-          - Современный QML интерфейс
-          
-          ### Установка:
-          ```bash
-          sudo dpkg -i fridgemanager_1.0.0_amd64.deb
-          sudo apt-get install -f  # Установить зависимости
-          ```
-          
-          ### Запуск:
-          ```bash
-          fridgemanager
-          ```
+        files: fridgemanager_${{ github.ref_name }}_amd64.deb
+
+    - name: 📤 Upload artifact (for manual runs)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: fridgemanager-package
+        path: fridgemanager_${{ github.event.inputs.version }}_amd64.deb
+        retention-days: 30
