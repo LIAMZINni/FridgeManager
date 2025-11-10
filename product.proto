@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package fridgemanager;
+
+message ProductProto {
+  int32 id = 1;
+  string name = 2;
+  int32 current_quantity = 3;
+  int32 norm_quantity = 4;
+}
+
+message ProductListProto {
+  repeated ProductProto products = 1;
+  string timestamp = 2;
+  string version = 3;
+}
+
+message OrderProto {
+  repeated ProductProto products_to_order = 1;
+  string order_date = 2;
+  int32 total_packs = 3;
+  string restaurant_name = 4;
+}

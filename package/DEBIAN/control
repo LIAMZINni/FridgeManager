@@ -1,0 +1,15 @@
+# package/DEBIAN/control
+Package: fridgemanager
+Version: 1.0.0
+Architecture: amd64
+Maintainer: Your Name <your.email@example.com>
+Depends: libqt6core6, libqt6qml6, libqt6quick6, postgresql-client, libpq5
+Section: utils
+Priority: optional
+Description: Restaurant fridge inventory manager
+ Track products in restaurant fridge with PostgreSQL support.
+ Features:
+  - Product inventory management
+  - Income/outcome tracking
+  - Supplier order generation
+  - Modern QML interface
