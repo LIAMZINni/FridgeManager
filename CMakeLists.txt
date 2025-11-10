@@ -1,7 +1,7 @@
 ﻿# CMakeList.txt: проект CMake для FridgeManager; включите исходный код и определения,
 # укажите здесь логику для конкретного проекта.
 #
-cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.16)
 
 # Включение горячей перезагрузки для компиляторов MSVC, если поддерживается.
 if (POLICY CMP0141)
@@ -20,6 +20,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 #set(CMAKE_AUTORCC ON)
+
 
 
 set(Qt6_DIR "D:/Qt/6.10.0/msvc2022_64/lib/cmake/Qt6")
@@ -102,3 +103,10 @@ endif()
 
 # TODO: Добавьте тесты и целевые объекты, если это необходимо.
 
+# === ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ ДЛЯ LINUX ===
+if(UNIX AND NOT APPLE)
+    # Для Linux указываем где искать QML файлы
+    target_compile_definitions(FridgeManager PRIVATE 
+        QML_PATH="/usr/share/fridgemanager/Main.qml"
+    )
+endif()
