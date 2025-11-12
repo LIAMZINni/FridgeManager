@@ -3,96 +3,65 @@ name: Build and Release FridgeManager
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:    # ← ДОБАВЛЯЕМ РУЧНОЙ ЗАПУСК
+  workflow_dispatch:
     inputs:
       version:
-        description: 'Version for the package'
+        description: 'Package version'
         required: true
         default: '1.0.0'
         type: string
 
 jobs:
   build-linux:
-    name: Build .deb package for Linux
+    name: Build .deb package
     runs-on: ubuntu-22.04
     
     steps:
-    - name: 📥 Checkout code
+    - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: 🛠️ Install build dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          cmake \
-          qt6-base-dev \
-          qt6-declarative-dev \
-          libgl1-mesa-dev \
-          libpq-dev \
-          libpq5 \
-          postgresql-client \
-          devscripts \
-          debhelper \
-          dpkg-dev
+        sudo apt-get install -y build-essential cmake qt6-base-dev qt6-declarative-dev libgl1-mesa-dev libpq-dev postgresql-client devscripts debhelper dpkg-dev
 
-    - name: 🔧 Configure project
+    - name: Build project
       run: |
-        mkdir build
+        mkdir -p build
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=Release
-
-    - name: 🏗️ Build project
-      run: |
-        cd build
         make -j$(nproc)
 
-    - name: 📦 Create .deb package structure
+    - name: Create package structure
       run: |
         mkdir -p package/DEBIAN
         mkdir -p package/usr/bin
         mkdir -p package/usr/share/fridgemanager
-        
-        # Используем версию из ручного ввода или тега
-        PACKAGE_VERSION="${{ github.event.inputs.version || github.ref_name }}"
-        echo "Building version: $PACKAGE_VERSION"
-        
-        # Создаем control файл с правильной версией
-        cat > package/DEBIAN/control << EOF
+
+        # Create control file
+        cat > package/DEBIAN/control << 'EOF'
         Package: fridgemanager
-        Version: $PACKAGE_VERSION
+        Version: 1.0.0
         Architecture: amd64
-        Maintainer: GitHub Actions <actions@github.com>
+        Maintainer: GitHub Actions
         Depends: libqt6core6, libqt6qml6, libqt6quick6, postgresql-client, libpq5
         Section: utils
         Priority: optional
-        Description: Restaurant fridge inventory manager
-         Track products in restaurant fridge with PostgreSQL support.
+        Description: Restaurant fridge manager
         EOF
-        
+
+        # Copy files
         cp build/FridgeManager package/usr/bin/fridgemanager
         cp Main.qml package/usr/share/fridgemanager/
         chmod 755 package/usr/bin/fridgemanager
 
-    - name: 🎁 Build .deb package
+    - name: Build deb package
       run: |
-        PACKAGE_VERSION="${{ github.event.inputs.version || github.ref_name }}"
-        dpkg-deb --build package fridgemanager_${PACKAGE_VERSION}_amd64.deb
-        
-        # Показываем информацию о пакете
-        dpkg --info fridgemanager_${PACKAGE_VERSION}_amd64.deb
-        echo "📦 Package created: fridgemanager_${PACKAGE_VERSION}_amd64.deb"
+        dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
+        dpkg --info fridgemanager_1.0.0_amd64.deb
 
-    - name: 🏷️ Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: fridgemanager_${{ github.ref_name }}_amd64.deb
-
-    - name: 📤 Upload artifact (for manual runs)
-      if: github.event_name == 'workflow_dispatch'
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: fridgemanager-package
-        path: fridgemanager_${{ github.event.inputs.version }}_amd64.deb
-        retention-days: 30
+        name: fridgemanager-deb
+        path: fridgemanager_1.0.0_amd64.deb
