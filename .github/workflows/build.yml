@@ -59,7 +59,7 @@ jobs:
 
     - name: 📝 Create control file
       run: |
-        cat > package/DEBIAN/control << 'EOF'
+        cat << 'CONTROL_EOF' > package/DEBIAN/control
         Package: fridgemanager
         Version: 1.0.0
         Architecture: amd64
@@ -74,11 +74,11 @@ jobs:
           - Product inventory tracking
           - Supplier order generation
           - Modern QML interface
-        EOF
+        CONTROL_EOF
 
             - name: 📝 Create postinst script
               run: |
-                cat > package/DEBIAN/postinst << 'EOF'
+                cat << 'POSTINST_EOF' > package/DEBIAN/postinst
         #!/bin/bash
         set -e
 
@@ -128,11 +128,11 @@ jobs:
         echo "🎉 Setup completed!"
         echo "➡️ Run: fridgemanager"
         echo "=========================================="
-        EOF
+        POSTINST_EOF
 
             - name: 📝 Create prerm script
               run: |
-                cat > package/DEBIAN/prerm << 'EOF'
+                cat << 'PRERM_EOF' > package/DEBIAN/prerm
         #!/bin/bash
         set -e
 
@@ -150,21 +150,21 @@ jobs:
     
             echo "✅ Cleanup completed"
         fi
-        EOF
+        PRERM_EOF
 
-    - name: 📁 Copy program files
-      run: |
-        cp build/FridgeManager package/usr/bin/fridgemanager
-        cp Main.qml package/usr/share/fridgemanager/
-        chmod 755 package/usr/bin/fridgemanager
-        chmod 755 package/DEBIAN/postinst
-        chmod 755 package/DEBIAN/prerm
+            - name: 📁 Copy program files
+              run: |
+                cp build/FridgeManager package/usr/bin/fridgemanager
+                cp Main.qml package/usr/share/fridgemanager/
+                chmod 755 package/usr/bin/fridgemanager
+                chmod 755 package/DEBIAN/postinst
+                chmod 755 package/DEBIAN/prerm
 
-    - name: 🎁 Build deb package
-      run: |
-        dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
-        dpkg --info fridgemanager_1.0.0_amd64.deb
-        echo "📦 Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
+            - name: 🎁 Build deb package
+              run: |
+                dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
+                dpkg --info fridgemanager_1.0.0_amd64.deb
+                echo "📦 Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
 
     - name: 🧪 Test package installation
       run: |
