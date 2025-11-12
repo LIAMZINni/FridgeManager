@@ -27,6 +27,11 @@ jobs:
           qtbase5-dev \
           qt5-qmake \
           qtdeclarative5-dev \
+          qml-module-qtquick2 \
+          qml-module-qtquick-window2 \
+          qml-module-qtquick-controls2 \
+          qml-module-qtquick-layouts \
+          qml-module-qtquick-dialogs \
           libqt5sql5-psql \
           build-essential \
           cmake \
@@ -54,72 +59,98 @@ jobs:
 
     - name: 📝 Create control file
       run: |
-        echo "Package: fridgemanager" > package/DEBIAN/control
-        echo "Version: 1.0.0" >> package/DEBIAN/control
-        echo "Architecture: amd64" >> package/DEBIAN/control
-        echo "Maintainer: GitHub Actions <actions@github.com>" >> package/DEBIAN/control
-        echo "Depends: postgresql, libqt5core5, libqt5qml5, libqt5quick5, libqt5sql5-psql, libpq5" >> package/DEBIAN/control
-        echo "Section: utils" >> package/DEBIAN/control
-        echo "Priority: optional" >> package/DEBIAN/control
-        echo "Description: Restaurant fridge manager with PostgreSQL" >> package/DEBIAN/control
-        echo " Automatic database setup and product inventory management." >> package/DEBIAN/control
+        cat > package/DEBIAN/control << 'EOF'
+        Package: fridgemanager
+        Version: 1.0.0
+        Architecture: amd64
+        Maintainer: GitHub Actions <actions@github.com>
+        Depends: postgresql, libqt5core5a, libqt5qml5, libqt5quick5, libqt5sql5-psql, libpq5, qml-module-qtquick2, qml-module-qtquick-window2, qml-module-qtquick-controls2
+        Section: utils
+        Priority: optional
+        Description: Restaurant fridge manager with PostgreSQL
+         Automatic database setup and product inventory management.
+         Features:
+          - Auto-creates PostgreSQL database
+          - Product inventory tracking
+          - Supplier order generation
+          - Modern QML interface
+        EOF
 
-    - name: 📝 Create postinst script
-      run: |
-        echo "#!/bin/bash" > package/DEBIAN/postinst
-        echo "set -e" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "echo \"==========================================\"" >> package/DEBIAN/postinst
-        echo "echo \"   Setting up FridgeManager\"" >> package/DEBIAN/postinst
-        echo "echo \"==========================================\"" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "chmod 755 /usr/bin/fridgemanager" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "if ! command -v psql &> /dev/null; then" >> package/DEBIAN/postinst
-        echo "    echo \"PostgreSQL not found!\"" >> package/DEBIAN/postinst
-        echo "    exit 1" >> package/DEBIAN/postinst
-        echo "fi" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "echo \"Starting PostgreSQL...\"" >> package/DEBIAN/postinst
-        echo "systemctl start postgresql || true" >> package/DEBIAN/postinst
-        echo "systemctl enable postgresql || true" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "sleep 3" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "echo \"Creating database...\"" >> package/DEBIAN/postinst
-        echo "sudo -u postgres createdb fridgemanager 2>/dev/null && echo \"Database created\" || echo \"Database exists\"" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "echo \"Creating products table...\"" >> package/DEBIAN/postinst
-        echo "sudo -u postgres psql -d fridgemanager -c \"CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(100) UNIQUE NOT NULL, current_quantity INTEGER NOT NULL DEFAULT 0, norm_quantity INTEGER NOT NULL);\" 2>/dev/null && echo \"Table created\" || echo \"Table exists\"" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "echo \"Adding sample data...\"" >> package/DEBIAN/postinst
-        echo "sudo -u postgres psql -d fridgemanager -c \"INSERT INTO products (name, current_quantity, norm_quantity) VALUES ('Cottage Cheese', 5, 10), ('Cheese', 12, 15), ('Milk', 18, 20), ('Eggs', 25, 30), ('Olives', 3, 8) ON CONFLICT (name) DO NOTHING;\" 2>/dev/null && echo \"Data added\" || echo \"Data exists\"" >> package/DEBIAN/postinst
-        echo "" >> package/DEBIAN/postinst
-        echo "echo \"Setup completed! Run: fridgemanager\"" >> package/DEBIAN/postinst
+            - name: 📝 Create postinst script
+              run: |
+                cat > package/DEBIAN/postinst << 'EOF'
+        #!/bin/bash
+        set -e
 
-    - name: 📝 Create prerm script
-      run: |
-        echo "#!/bin/bash" > package/DEBIAN/prerm
-        echo "set -e" >> package/DEBIAN/prerm
-        echo "" >> package/DEBIAN/prerm
-        echo "echo \"==========================================\"" >> package/DEBIAN/prerm
-        echo "echo \"   Removing FridgeManager\"" >> package/DEBIAN/prerm
-        echo "echo \"==========================================\"" >> package/DEBIAN/prerm
-        echo "" >> package/DEBIAN/prerm
-        echo "if [ \"\$1\" = \"remove\" ] || [ \"\$1\" = \"deconfigure\" ]; then" >> package/DEBIAN/prerm
-        echo "    read -p \"Remove fridgemanager database? [y/N]: \" -n 1 -r" >> package/DEBIAN/prerm
-        echo "    echo" >> package/DEBIAN/prerm
-        echo "    if [[ \$REPLY =~ ^[Yy]\$ ]]; then" >> package/DEBIAN/prerm
-        echo "        echo \"Removing database...\"" >> package/DEBIAN/prerm
-        echo "        sudo -u postgres dropdb --if-exists fridgemanager 2>/dev/null || true" >> package/DEBIAN/prerm
-        echo "        echo \"Database removed\"" >> package/DEBIAN/prerm
-        echo "    fi" >> package/DEBIAN/prerm
-        echo "    echo \"Cleaning config files...\"" >> package/DEBIAN/prerm
-        echo "    rm -rf /etc/fridgemanager 2>/dev/null || true" >> package/DEBIAN/prerm
-        echo "    rm -rf /var/lib/fridgemanager 2>/dev/null || true" >> package/DEBIAN/prerm
-        echo "fi" >> package/DEBIAN/prerm
-        echo "" >> package/DEBIAN/prerm
-        echo "echo \"Cleanup completed\"" >> package/DEBIAN/prerm
+        echo "=========================================="
+        echo "   Setting up FridgeManager"
+        echo "=========================================="
+
+        # Make executable
+        chmod 755 /usr/bin/fridgemanager
+
+        # Check PostgreSQL
+        if ! command -v psql &> /dev/null; then
+            echo "❌ PostgreSQL not found!"
+            exit 1
+        fi
+
+        echo "🔧 Starting PostgreSQL..."
+        sudo systemctl start postgresql || true
+        sudo systemctl enable postgresql || true
+
+        # Wait for PostgreSQL to start
+        sleep 5
+
+        echo "🗄️ Creating database..."
+        sudo -u postgres createdb fridgemanager 2>/dev/null && echo "✅ Database created" || echo "📁 Database already exists"
+
+        echo "📊 Creating products table..."
+        sudo -u postgres psql -d fridgemanager -c "
+        CREATE TABLE IF NOT EXISTS products (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100) UNIQUE NOT NULL,
+            current_quantity INTEGER NOT NULL DEFAULT 0,
+            norm_quantity INTEGER NOT NULL
+        );" 2>/dev/null && echo "✅ Table created" || echo "📋 Table already exists"
+
+        echo "📝 Adding sample data..."
+        sudo -u postgres psql -d fridgemanager -c "
+        INSERT INTO products (name, current_quantity, norm_quantity) VALUES
+        ('Творог', 5, 10),
+        ('Сыр', 12, 15),
+        ('Молоко', 18, 20),
+        ('Яйца', 25, 30),
+        ('Оливки', 3, 8)
+        ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "✅ Data added" || echo "📊 Data already exists"
+
+        echo ""
+        echo "🎉 Setup completed!"
+        echo "➡️ Run: fridgemanager"
+        echo "=========================================="
+        EOF
+
+            - name: 📝 Create prerm script
+              run: |
+                cat > package/DEBIAN/prerm << 'EOF'
+        #!/bin/bash
+        set -e
+
+        echo "=========================================="
+        echo "   Removing FridgeManager"
+        echo "=========================================="
+
+        if [ "$1" = "remove" ] || [ "$1" = "deconfigure" ]; then
+            echo "🧹 Cleaning up..."
+    
+            # Remove config files
+            rm -rf /etc/fridgemanager 2>/dev/null || true
+            rm -rf /var/lib/fridgemanager 2>/dev/null || true
+            rm -rf /tmp/fridgemanager 2>/dev/null || true
+    
+            echo "✅ Cleanup completed"
+        fi
+        EOF
 
     - name: 📁 Copy program files
       run: |
@@ -133,16 +164,31 @@ jobs:
       run: |
         dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
         dpkg --info fridgemanager_1.0.0_amd64.deb
-        echo "Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
+        echo "📦 Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
 
     - name: 🧪 Test package installation
       run: |
-        echo "Testing package installation..."
+        echo "🧪 Testing package installation..."
+        
+        # Install the package
         sudo dpkg -i fridgemanager_1.0.0_amd64.deb || true
+        
+        # Fix dependencies
+        sudo apt-get update
         sudo apt-get install -f -y
         
+        # Test if program is installed
         if command -v fridgemanager &> /dev/null; then
             echo "✅ Program installed successfully"
+            
+            # Test database setup
+            echo "🧪 Testing database setup..."
+            sudo -u postgres psql -d fridgemanager -c "SELECT COUNT(*) FROM products;" && echo "✅ Database accessible" || echo "❌ Database error"
+            
+            # Show products
+            echo "📊 Products in database:"
+            sudo -u postgres psql -d fridgemanager -c "SELECT name, current_quantity, norm_quantity FROM products;"
+            
         else
             echo "❌ Program installation failed"
             exit 1
@@ -154,3 +200,29 @@ jobs:
         name: fridgemanager-deb-package
         path: fridgemanager_1.0.0_amd64.deb
         retention-days: 30
+
+    - name: 🏷️ Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: fridgemanager_1.0.0_amd64.deb
+        body: |
+          ## Fridge Manager ${{ github.ref_name }}
+          
+          ### Features:
+          - ✅ Automatic PostgreSQL database creation
+          - ✅ Product inventory management
+          - ✅ Supplier order generation
+          - ✅ Modern QML interface
+          
+          ### Installation:
+          ```bash
+          sudo dpkg -i fridgemanager_1.0.0_amd64.deb
+          sudo apt-get install -f
+          fridgemanager
+          ```
+          
+          ### Database:
+          - Auto-creates database and tables
+          - Includes sample products
+          - PostgreSQL backend
