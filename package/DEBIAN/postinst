@@ -1,0 +1,51 @@
+﻿#!/bin/bash
+set -e
+
+echo "=========================================="
+echo "   Настройка FridgeManager"
+echo "=========================================="
+
+# Делаем скрипт исполняемым
+chmod 755 /usr/bin/fridgemanager
+
+# Проверяем установлен ли PostgreSQL
+if ! command -v psql &> /dev/null; then
+    echo "❌ PostgreSQL не установлен!"
+    echo "Установите: sudo apt-get install postgresql"
+    exit 1
+fi
+
+# Запускаем PostgreSQL
+echo "🔧 Запускаем PostgreSQL..."
+systemctl start postgresql || true
+systemctl enable postgresql || true
+
+# Создаем базу данных
+echo "🗄️ Создаем базу данных..."
+sudo -u postgres createdb fridgemanager 2>/dev/null && echo "✅ База данных создана" || echo "📁 База данных уже существует"
+
+# Создаем таблицу
+echo "📊 Создаем таблицу продуктов..."
+sudo -u postgres psql -d fridgemanager -c "
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    current_quantity INTEGER NOT NULL DEFAULT 0,
+    norm_quantity INTEGER NOT NULL
+);" && echo "✅ Таблица создана" || echo "📋 Таблица уже существует"
+
+# Добавляем тестовые данные
+echo "📝 Добавляем тестовые данные..."
+sudo -u postgres psql -d fridgemanager -c "
+INSERT INTO products (name, current_quantity, norm_quantity) VALUES
+('Творог', 5, 10),
+('Сыр', 12, 15), 
+('Молоко', 18, 20),
+('Яйца', 25, 30),
+('Оливки', 3, 8)
+ON CONFLICT (name) DO NOTHING;" && echo "✅ Данные добавлены" || echo "📊 Данные уже существуют"
+
+echo ""
+echo "🎉 Установка завершена!"
+echo "➡️ Запустите: fridgemanager"
+echo "=========================================="
