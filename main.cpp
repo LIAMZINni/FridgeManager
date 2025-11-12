@@ -6,7 +6,9 @@
 #include <QTextStream>
 #include <QDateTime>
 #include <QStandardPaths>
-#include "DatabaseManager.h"
+#include <QDir>
+#include <QFileDialog>
+#include <QMessageBox>
 
 class Product : public QObject
 {
@@ -58,9 +60,10 @@ class FridgeManager : public QObject
 public:
     explicit FridgeManager(QObject* parent = nullptr)
         : QObject(parent)
-        , m_dbManager(new DatabaseManager(this))
+        , m_databaseConnected(false)
+        , m_databaseStatus("Подключение...")
     {
-        initializeDatabase();
+        initializeProducts();
     }
 
     QQmlListProperty<Product> products() {
@@ -73,72 +76,71 @@ public:
     Q_INVOKABLE void addProductQuantity(int index, int amount) {
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
-            int newQuantity = product->currentQuantity() + amount;
-
-            if (m_databaseConnected) {
-                if (m_dbManager->updateProductQuantity(product->id(), newQuantity)) {
-                    product->setCurrentQuantity(newQuantity);
-                    emit productsChanged();
-                }
-                else {
-                    qWarning() << "Database update failed:" << m_dbManager->getLastError();
-                    // Все равно обновляем локально
-                    product->setCurrentQuantity(newQuantity);
-                    emit productsChanged();
-                }
-            }
-            else {
-                product->setCurrentQuantity(newQuantity);
-                emit productsChanged();
-            }
+            product->setCurrentQuantity(product->currentQuantity() + amount);
+            emit productsChanged();
         }
     }
 
     Q_INVOKABLE void removeProductQuantity(int index, int amount) {
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
-
             if (product->currentQuantity() >= amount) {
-                int newQuantity = product->currentQuantity() - amount;
-
-                if (m_databaseConnected) {
-                    if (m_dbManager->updateProductQuantity(product->id(), newQuantity)) {
-                        product->setCurrentQuantity(newQuantity);
-                        emit productsChanged();
-                    }
-                    else {
-                        qWarning() << "Database update failed:" << m_dbManager->getLastError();
-                        // Все равно обновляем локально
-                        product->setCurrentQuantity(newQuantity);
-                        emit productsChanged();
-                    }
-                }
-                else {
-                    product->setCurrentQuantity(newQuantity);
-                    emit productsChanged();
-                }
+                product->setCurrentQuantity(product->currentQuantity() - amount);
+                emit productsChanged();
             }
         }
     }
 
-    Q_INVOKABLE void refreshProducts() {
-        loadProductsFromDatabase();
+    Q_INVOKABLE QString generateOrder() {
+        // Сохраняем в домашнюю директорию по умолчанию
+        QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        QString defaultFileName = defaultPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
+
+        return saveOrderToFile(defaultFileName);
     }
 
-    Q_INVOKABLE QString generateOrder(const QString& filePath) {
-        qDebug() << "Generating order to:" << filePath;
+    Q_INVOKABLE QString saveOrderToCustomLocation() {
+        // В Linux используем нативный диалог через D-Bus
+#ifdef Q_OS_LINUX
+        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        QString fileName = QFileDialog::getSaveFileName(nullptr,
+            "Сохранить заявку",
+            desktopPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt",
+            "Текстовые файлы (*.txt)");
 
+        if (!fileName.isEmpty()) {
+            return saveOrderToFile(fileName);
+        }
+        return "Отменено пользователем";
+#else
+        return "Функция доступна только в Linux";
+#endif
+    }
+
+    Q_INVOKABLE QString getDefaultDocumentsPath() {
+        return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+
+    Q_INVOKABLE QString getDefaultDownloadsPath() {
+        return QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    }
+
+    Q_INVOKABLE QString getDefaultHomePath() {
+        return QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    }
+
+    Q_INVOKABLE bool fileExists(const QString& filePath) {
+        return QFile::exists(filePath);
+    }
+
+private:
+    QString saveOrderToFile(const QString& filePath) {
         QFile file(filePath);
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-            stream.setEncoding(QStringConverter::Utf8);  // Qt6
-#else
-            stream.setCodec("UTF-8");  // Qt5
-#endif
+            stream.setEncoding(QStringConverter::Utf8);
 
-            // Заголовок заявки
             stream << "ЗАЯВКА ДЛЯ ПОСТАВЩИКА\n";
             stream << "=====================\n";
             stream << "Ресторан: 'Гурман'\n";
@@ -148,7 +150,6 @@ public:
             bool hasOrders = false;
             int totalPacks = 0;
 
-            // Продукты для заказа
             stream << "ПРОДУКТЫ ДЛЯ ЗАКАЗА:\n";
             stream << "-------------------\n";
 
@@ -169,80 +170,32 @@ public:
                 stream << "ИТОГО: " << totalPacks << " упаковок\n";
             }
 
+            // Текущие остатки
+            stream << "\n=====================\n";
+            stream << "ТЕКУЩИЕ ОСТАТКИ:\n";
+            stream << "-------------------\n";
+
+            for (Product* product : m_products) {
+                stream << "• " << product->name() << ": " << product->currentQuantity()
+                    << " / " << product->normQuantity() << " упаковок";
+                if (product->needsOrder()) {
+                    stream << " (нужно " << product->orderQuantity() << ")";
+                }
+                stream << "\n";
+            }
+
             file.close();
 
-            qDebug() << "Order successfully saved to:" << filePath;
+            qDebug() << "Order saved to:" << filePath;
             return "Успех: Заявка сохранена в " + filePath;
         }
         else {
-            qDebug() << "Failed to save order file!";
-            return "Ошибка: Не удалось сохранить файл";
+            qDebug() << "Failed to save order file:" << filePath;
+            return "Ошибка: Не удалось сохранить файл " + filePath;
         }
     }
 
-    Q_INVOKABLE QString getDefaultFileName() {
-        return "заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
-    }
-
-    Q_INVOKABLE QString getDocumentsPath() {
-        return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    }
-
-signals:
-    void productsChanged();
-    void databaseStatusChanged();
-
-private:
-    void initializeDatabase() {
-        m_databaseConnected = m_dbManager->connectToDatabase();
-
-        if (m_databaseConnected) {
-            m_databaseStatus = "PostgreSQL подключена";
-            qDebug() << "Database connected successfully";
-            loadProductsFromDatabase();
-        }
-        else {
-            m_databaseStatus = "Локальный режим (PostgreSQL недоступна)";
-            qWarning() << "Database connection failed, using local mode";
-            initializeLocalProducts();
-        }
-
-        emit databaseStatusChanged();
-    }
-
-    void loadProductsFromDatabase() {
-        if (m_databaseConnected) {
-            auto dbProducts = m_dbManager->getAllProducts();
-            if (!dbProducts.isEmpty()) {
-                updateProductsList(dbProducts);
-                return;
-            }
-        }
-
-        // Если БД недоступна или пуста - используем локальные данные
-        initializeLocalProducts();
-    }
-
-    void updateProductsList(const QVector<ProductData>& dbProducts) {
-        qDeleteAll(m_products);
-        m_products.clear();
-
-        for (const auto& productData : dbProducts) {
-            m_products.append(new Product(
-                productData.id,
-                productData.name,
-                productData.currentQuantity,
-                productData.normQuantity,
-                this
-            ));
-        }
-
-        emit productsChanged();
-        qDebug() << "Products loaded from database:" << m_products.size();
-    }
-
-    void initializeLocalProducts() {
-        qDeleteAll(m_products);
+    void initializeProducts() {
         m_products.clear();
 
         m_products.append(new Product(1, "Творог", 5, 10, this));
@@ -251,24 +204,28 @@ private:
         m_products.append(new Product(4, "Яйца", 25, 30, this));
         m_products.append(new Product(5, "Оливки", 3, 8, this));
 
-        emit productsChanged();
-        qDebug() << "Using local products data";
+        m_databaseStatus = "Локальный режим";
+        emit databaseStatusChanged();
     }
 
-    DatabaseManager* m_dbManager;
     QList<Product*> m_products;
-    bool m_databaseConnected = false;
-    QString m_databaseStatus = "Подключение...";
+    bool m_databaseConnected;
+    QString m_databaseStatus;
+
+signals:
+    void productsChanged();
+    void databaseStatusChanged();
 };
 
 int main(int argc, char* argv[])
 {
-    qDebug() << "Starting application...";
+    qDebug() << "Starting FridgeManager application...";
 
     QGuiApplication app(argc, argv);
 
     app.setApplicationName("FridgeManager");
     app.setApplicationVersion("1.0.0");
+    app.setOrganizationName("Restaurant");
 
     qmlRegisterType<Product>("FridgeManager", 1, 0, "Product");
 
@@ -277,15 +234,47 @@ int main(int argc, char* argv[])
     FridgeManager* manager = new FridgeManager();
     engine.rootContext()->setContextProperty("fridgeManager", manager);
 
-    engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
+    qDebug() << "Loading QML...";
+
+    // УМНАЯ ЗАГРУЗКА QML - пробуем разные пути
+    QStringList possiblePaths;
+
+    // 1. Из текущей директории (для разработки)
+    possiblePaths << QDir::current().absoluteFilePath("Main.qml");
+
+    // 2. Из системной директории (для установленного пакета)
+    possiblePaths << "/usr/share/fridgemanager/Main.qml";
+
+    // 3. Из домашней директории
+    possiblePaths << QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/Main.qml";
+
+    QString qmlPath;
+    for (const QString& path : possiblePaths) {
+        if (QFile::exists(path)) {
+            qmlPath = path;
+            qDebug() << "Found QML at:" << path;
+            break;
+        }
+    }
+
+    if (!qmlPath.isEmpty()) {
+        qDebug() << "Loading QML from file:" << qmlPath;
+        engine.load(QUrl::fromLocalFile(qmlPath));
+    }
+    else {
+        qDebug() << "QML file not found in standard locations, trying resource...";
+        // Последняя попытка - из ресурсов
+        engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
+    }
 
     if (engine.rootObjects().isEmpty()) {
-        qDebug() << "Failed to load QML!";
+        qDebug() << "❌ FAILED TO LOAD QML!";
+        qDebug() << "Checked paths:" << possiblePaths;
         delete manager;
         return -1;
     }
 
-    qDebug() << "Application started successfully!";
+    qDebug() << "✅ Application started successfully!";
     return app.exec();
 }
 

@@ -1,246 +1,248 @@
 ﻿import QtQuick 2.15
 import QtQuick.Window 2.15
-import Qt.labs.platform 1.1 as Platform
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import FridgeManager 1.0
 
-Window {
+ApplicationWindow {
     id: mainWindow
-    width: 800
-    height: 600
+    width: 900
+    height: 700
     visible: true
     title: "Учет продуктов ресторана"
+    minimumWidth: 800
+    minimumHeight: 600
 
-    // Диалог сохранения файла
-    Platform.FileDialog {
-        id: fileDialog
-        title: "Сохранить заявку для поставщика"
-        folder: Platform.StandardPath.writableLocation(Platform.StandardPath.DocumentsLocation)
-        fileMode: Platform.FileDialog.SaveFile
-        nameFilters: ["Текстовые файлы (*.txt)", "Все файлы (*)"]
+    // Диалог результата
+    Popup {
+        id: resultDialog
+        width: 500
+        height: 200
+        modal: true
+        focus: true
+        anchors.centerIn: parent
         
-        onAccepted: {
-            var result = fridgeManager.generateOrder(fileDialog.file.toString().replace("file:///", ""));
-            resultDialog.message = result;
-            resultDialog.visible = true;
+        background: Rectangle {
+            color: "white"
+            border.color: "#3498db"
+            border.width: 2
+            radius: 10
         }
         
-        onRejected: {
-            resultDialog.message = "Сохранение отменено";
-            resultDialog.visible = true;
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 15
+            
+            Label {
+                id: dialogTitle
+                text: "Результат"
+                font.bold: true
+                font.pixelSize: 18
+                Layout.alignment: Qt.AlignHCenter
+            }
+            
+            Label {
+                id: dialogMessage
+                text: ""
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+            
+            Button {
+                text: "OK"
+                Layout.alignment: Qt.AlignHCenter
+                onClicked: resultDialog.close()
+            }
         }
     }
 
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#f0f8ff" }
-            GradientStop { position: 1.0; color: "#e6f3ff" }
+            GradientStop { position: 0.0; color: "#f8f9fa" }
+            GradientStop { position: 1.0; color: "#e9ecef" }
         }
 
-        Column {
+        ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20
             spacing: 15
 
-            Text {
+            // Заголовок
+            Label {
                 text: "📦 Учет продуктов холодильника"
                 font.pixelSize: 28
                 font.bold: true
                 color: "#2c3e50"
-                anchors.horizontalCenter: parent.horizontalCenter
+                Layout.alignment: Qt.AlignHCenter
+            }
+
+            // Статус БД
+            Rectangle {
+                Layout.fillWidth: true
+                height: 40
+                color: fridgeManager.databaseConnected ? "#d4edda" : "#f8d7da"
+                radius: 5
+                border.color: fridgeManager.databaseConnected ? "#c3e6cb" : "#f5c6cb"
+
+                Label {
+                    text: fridgeManager.databaseStatus
+                    color: fridgeManager.databaseConnected ? "#155724" : "#721c24"
+                    font.pixelSize: 14
+                    anchors.centerIn: parent
+                }
             }
 
             // Список продуктов
-            ListView {
-                id: productList
-                width: parent.width
-                height: parent.height - 150
-                model: fridgeManager.products
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: "white"
+                border.color: "#dee2e6"
+                radius: 8
+
+                ScrollView {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    clip: true
+
+                    ListView {
+                        id: productList
+                        model: fridgeManager.products
+                        spacing: 2
+
+                        delegate: Rectangle {
+                            width: productList.width
+                            height: 70
+                            color: index % 2 === 0 ? "#f8f9fa" : "#ffffff"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 15
+
+                                // Название продукта
+                                Label {
+                                    text: modelData.name
+                                    font.bold: true
+                                    font.pixelSize: 16
+                                    color: "#2c3e50"
+                                    Layout.preferredWidth: 120
+                                }
+
+                                // Количества
+                                Column {
+                                    Layout.preferredWidth: 120
+                                    spacing: 2
+
+                                    Label {
+                                        text: "В наличии: " + modelData.currentQuantity
+                                        font.pixelSize: 12
+                                        color: "#495057"
+                                    }
+
+                                    Label {
+                                        text: "Норма: " + modelData.normQuantity
+                                        font.pixelSize: 12
+                                        color: "#6c757d"
+                                    }
+                                }
+
+                                // Статус заказа
+                                Label {
+                                    text: modelData.needsOrder ? 
+                                          "⚠️ Нужен заказ: " + modelData.orderQuantity : 
+                                          "✅ Достаточно"
+                                    color: modelData.needsOrder ? "#dc3545" : "#28a745"
+                                    font.bold: modelData.needsOrder
+                                    Layout.fillWidth: true
+                                }
+
+                                // Кнопки управления
+                                Row {
+                                    spacing: 5
+                                    Layout.alignment: Qt.AlignRight
+
+                                    Button {
+                                        text: "+"
+                                        width: 40
+                                        height: 30
+                                        onClicked: fridgeManager.addProductQuantity(index, 1)
+                                    }
+
+                                    Button {
+                                        text: "-"
+                                        width: 40
+                                        height: 30
+                                        onClicked: fridgeManager.removeProductQuantity(index, 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Панель управления
+            RowLayout {
+                Layout.fillWidth: true
                 spacing: 10
 
-                delegate: Rectangle {
-                    width: productList.width
-                    height: 80
-                    color: index % 2 === 0 ? "#ffffff" : "#f8f9fa"
-                    border.color: "#dee2e6"
-                    radius: 8
+                // Информация о путях
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 5
 
-                    Row {
-                        anchors.fill: parent
-                        anchors.margins: 15
-                        spacing: 20
+                    Label {
+                        text: "Пути сохранения:"
+                        font.bold: true
+                        color: "#495057"
+                    }
 
-                        Text {
-                            text: modelData.name
-                            font.bold: true
-                            font.pixelSize: 18
-                            color: "#2c3e50"
-                            width: 120
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
+                    Label {
+                        text: "• Домашняя папка: " + fridgeManager.getDefaultHomePath()
+                        font.pixelSize: 10
+                        color: "#6c757d"
+                    }
 
-                        Column {
-                            spacing: 5
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            Text {
-                                text: "В наличии: " + modelData.currentQuantity
-                                font.pixelSize: 14
-                                color: "#34495e"
-                            }
-
-                            Text {
-                                text: "Норма: " + modelData.normQuantity
-                                font.pixelSize: 14
-                                color: "#7f8c8d"
-                            }
-                        }
-
-                        Text {
-                            text: modelData.needsOrder ? 
-                                  "⚠️ Нужен заказ: " + modelData.orderQuantity : 
-                                  "✅ Достаточно"
-                            color: modelData.needsOrder ? "#e74c3c" : "#27ae60"
-                            font.bold: modelData.needsOrder
-                            width: 180
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Row {
-                            spacing: 10
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            Rectangle {
-                                width: 40
-                                height: 40
-                                color: "#27ae60"
-                                radius: 5
-
-                                Text {
-                                    text: "+"
-                                    color: "white"
-                                    font.bold: true
-                                    font.pixelSize: 18
-                                    anchors.centerIn: parent
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: fridgeManager.addProductQuantity(index, 1)
-                                }
-                            }
-
-                            Rectangle {
-                                width: 40
-                                height: 40
-                                color: "#e74c3c"
-                                radius: 5
-
-                                Text {
-                                    text: "-"
-                                    color: "white"
-                                    font.bold: true
-                                    font.pixelSize: 18
-                                    anchors.centerIn: parent
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: fridgeManager.removeProductQuantity(index, 1)
-                                }
-                            }
-                        }
+                    Label {
+                        text: "• Документы: " + fridgeManager.getDefaultDocumentsPath()
+                        font.pixelSize: 10
+                        color: "#6c757d"
                     }
                 }
-            }
 
-            // Кнопка формирования заявки
-            Rectangle {
-                width: 200
-                height: 50
-                color: "#3498db"
-                radius: 10
-                anchors.horizontalCenter: parent.horizontalCenter
+                // Кнопки сохранения
+                Column {
+                    spacing: 5
 
-                Text {
-                    text: "📋 Сформировать заявку"
-                    color: "white"
-                    font.bold: true
-                    font.pixelSize: 16
-                    anchors.centerIn: parent
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        // Устанавливаем имя файла по умолчанию
-                        fileDialog.currentFile = "file:///" + fridgeManager.getDocumentsPath() + "/" + fridgeManager.getDefaultFileName();
-                        fileDialog.open();
+                    Button {
+                        text: "💾 Сохранить в домашнюю папку"
+                        onClicked: {
+                            var result = fridgeManager.generateOrder();
+                            dialogMessage.text = result;
+                            resultDialog.open();
+                        }
                     }
-                }
-            }
-        }
-    }
 
-    // Диалог результата
-    Rectangle {
-        id: resultDialog
-        width: 500
-        height: 200
-        color: "white"
-        border.color: "#3498db"
-        border.width: 3
-        radius: 15
-        visible: false
-        anchors.centerIn: parent
-
-        property string message: ""
-
-        Column {
-            anchors.centerIn: parent
-            spacing: 20
-            width: parent.width - 40
-
-            Text {
-                id: dialogTitle
-                text: resultDialog.message.startsWith("Успех") ? "✅ Успех!" : "❌ Ошибка"
-                font.pixelSize: 22
-                font.bold: true
-                color: resultDialog.message.startsWith("Успех") ? "#27ae60" : "#e74c3c"
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-
-            Text {
-                text: resultDialog.message
-                font.pixelSize: 14
-                color: "#34495e"
-                wrapMode: Text.Wrap
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Rectangle {
-                width: 120
-                height: 40
-                color: "#3498db"
-                radius: 8
-                anchors.horizontalCenter: parent.horizontalCenter
-
-                Text {
-                    text: "OK"
-                    color: "white"
-                    font.bold: true
-                    anchors.centerIn: parent
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: resultDialog.visible = false
+                    Button {
+                        text: "📁 Выбрать место сохранения"
+                        onClicked: {
+                            var result = fridgeManager.saveOrderToCustomLocation();
+                            dialogMessage.text = result;
+                            resultDialog.open();
+                        }
+                    }
                 }
             }
         }
     }
 
     Component.onCompleted: {
-        console.log("Приложение запущено! Продуктов: " + fridgeManager.products.count)
+        console.log("✅ FridgeManager loaded successfully!");
+        console.log("Home path:", fridgeManager.getDefaultHomePath());
+        console.log("Documents path:", fridgeManager.getDefaultDocumentsPath());
     }
 }
