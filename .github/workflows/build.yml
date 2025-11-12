@@ -25,17 +25,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           qtbase5-dev \
-          qtchooser \
           qt5-qmake \
-          qtbase5-dev-tools \
-          qttools5-dev-tools \
           qtdeclarative5-dev \
-          qml-module-qtquick2 \
-          qml-module-qtquick-window2 \
-          qml-module-qtquick-controls2 \
-          qml-module-qtquick-layouts \
-          qml-module-qtquick-dialogs \
-          qtquickcontrols2-5-dev \
           libqt5sql5-psql \
           build-essential \
           cmake \
@@ -61,8 +52,9 @@ jobs:
         mkdir -p package/usr/bin
         mkdir -p package/usr/share/fridgemanager
 
-        # Control file
-        cat > package/DEBIAN/control << 'EOF'
+    - name: 📝 Create control file
+      run: |
+        cat > package/DEBIAN/control << 'CONTROL_EOF'
         Package: fridgemanager
         Version: 1.0.0
         Architecture: amd64
@@ -72,10 +64,11 @@ jobs:
         Priority: optional
         Description: Restaurant fridge manager with PostgreSQL
          Automatic database setup and product inventory management.
-        EOF
+        CONTROL_EOF
 
-                # Postinst script
-                cat > package/DEBIAN/postinst << 'EOF'
+            - name: 📝 Create postinst script
+              run: |
+                cat > package/DEBIAN/postinst << 'POSTINST_EOF'
         #!/bin/bash
         set -e
 
@@ -106,10 +99,11 @@ jobs:
         sudo -u postgres psql -d fridgemanager -c "INSERT INTO products (name, current_quantity, norm_quantity) VALUES ('Cottage Cheese', 5, 10), ('Cheese', 12, 15), ('Milk', 18, 20), ('Eggs', 25, 30), ('Olives', 3, 8) ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "Data added" || echo "Data exists"
 
         echo "Setup completed! Run: fridgemanager"
-        EOF
+        POSTINST_EOF
 
-                # Prerm script
-                cat > package/DEBIAN/prerm << 'EOF'
+            - name: 📝 Create prerm script
+              run: |
+                cat > package/DEBIAN/prerm << 'PRERM_EOF'
         #!/bin/bash
         set -e
 
@@ -131,26 +125,38 @@ jobs:
         fi
 
         echo "Cleanup completed"
-        EOF
+        PRERM_EOF
 
-                # Copy main files
-                cp build/FridgeManager package/usr/bin/fridgemanager
-                cp Main.qml package/usr/share/fridgemanager/
+    - name: 📁 Copy program files
+      run: |
+        cp build/FridgeManager package/usr/bin/fridgemanager
+        cp Main.qml package/usr/share/fridgemanager/
+        chmod 755 package/usr/bin/fridgemanager
+        chmod 755 package/DEBIAN/postinst
+        chmod 755 package/DEBIAN/prerm
+
+    - name: 🎁 Build deb package
+      run: |
+        dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
+        dpkg --info fridgemanager_1.0.0_amd64.deb
+        echo "Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
+
+    - name: 🧪 Test package installation
+      run: |
+        echo "Testing package installation..."
+        sudo dpkg -i fridgemanager_1.0.0_amd64.deb || true
+        sudo apt-get install -f -y
         
-                # Set permissions
-                chmod 755 package/usr/bin/fridgemanager
-                chmod 755 package/DEBIAN/postinst
-                chmod 755 package/DEBIAN/prerm
+        if command -v fridgemanager &> /dev/null; then
+            echo "✅ Program installed successfully"
+        else
+            echo "❌ Program installation failed"
+            exit 1
+        fi
 
-            - name: 🎁 Build deb package
-              run: |
-                dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
-                dpkg --info fridgemanager_1.0.0_amd64.deb
-                echo "Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
-
-            - name: 📤 Upload artifact
-              uses: actions/upload-artifact@v4
-              with:
-                name: fridgemanager-deb-package
-                path: fridgemanager_1.0.0_amd64.deb
-                retention-days: 30
+    - name: 📤 Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: fridgemanager-deb-package
+        path: fridgemanager_1.0.0_amd64.deb
+        retention-days: 30
