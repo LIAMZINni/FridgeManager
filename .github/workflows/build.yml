@@ -23,8 +23,6 @@ jobs:
     - name: 🛠️ Install build dependencies
       run: |
         sudo apt-get update
-        
-        # Устанавливаем Qt5 development environment для Ubuntu 22.04
         sudo apt-get install -y \
           qtbase5-dev \
           qtchooser \
@@ -39,8 +37,6 @@ jobs:
           qml-module-qtquick-dialogs \
           qtquickcontrols2-5-dev \
           libqt5sql5-psql \
-        # Системные зависимости
-        sudo apt-get install -y \
           build-essential \
           cmake \
           libgl1-mesa-dev \
@@ -48,8 +44,6 @@ jobs:
           libpq5 \
           postgresql \
           postgresql-client \
-        # Инструменты пакетирования
-        sudo apt-get install -y \
           devscripts \
           debhelper \
           dpkg-dev
@@ -63,12 +57,11 @@ jobs:
 
     - name: 📦 Create package structure
       run: |
-        # Создаем структуру пакета
         mkdir -p package/DEBIAN
         mkdir -p package/usr/bin
         mkdir -p package/usr/share/fridgemanager
 
-        # Создаем control файл
+        # Control file (LATIN ONLY!)
         cat > package/DEBIAN/control << 'EOF'
         Package: fridgemanager
         Version: 1.0.0
@@ -78,191 +71,107 @@ jobs:
         Section: utils
         Priority: optional
         Description: Restaurant fridge manager with PostgreSQL
-        Automatic database setup and product inventory management.
-        Features:
+         Automatic database setup and product inventory management.
+         Features:
           - Auto-creates PostgreSQL database
           - Product inventory tracking
           - Supplier order generation
           - Modern QML interface
+         .
+         Homepage: https://github.com/LIAMZINni/FridgeManager
         EOF
 
-        # Создаем postinst скрипт (после установки)
-        cat > package/DEBIAN/postinst << 'EOF'
+                # Postinst script
+                cat > package/DEBIAN/postinst << 'EOF'
         #!/bin/bash
         set -e
 
         echo "=========================================="
-        echo "   Настройка FridgeManager"
+        echo "   Setting up FridgeManager"
         echo "=========================================="
 
-        # Делаем скрипт исполняемым
         chmod 755 /usr/bin/fridgemanager
 
-        # Проверяем установлен ли PostgreSQL
         if ! command -v psql &> /dev/null; then
-            echo "❌ PostgreSQL не установлен!"
-            echo "Установите: sudo apt-get install postgresql"
+            echo "PostgreSQL not found!"
             exit 1
         fi
 
-        # Запускаем PostgreSQL
-        echo "🔧 Запускаем PostgreSQL..."
+        echo "Starting PostgreSQL..."
         systemctl start postgresql || true
         systemctl enable postgresql || true
 
-        # Даем время на запуск
         sleep 3
 
-        # Создаем базу данных
-        echo "🗄️ Создаем базу данных..."
-        sudo -u postgres createdb fridgemanager 2>/dev/null && echo "✅ База данных создана" || echo "📁 База данных уже существует"
+        echo "Creating database..."
+        sudo -u postgres createdb fridgemanager 2>/dev/null && echo "Database created" || echo "Database exists"
 
-        # Создаем таблицу
-        echo "📊 Создаем таблицу продуктов..."
+        echo "Creating products table..."
         sudo -u postgres psql -d fridgemanager -c "
         CREATE TABLE IF NOT EXISTS products (
             id SERIAL PRIMARY KEY,
             name VARCHAR(100) UNIQUE NOT NULL,
             current_quantity INTEGER NOT NULL DEFAULT 0,
             norm_quantity INTEGER NOT NULL
-        );" 2>/dev/null && echo "✅ Таблица создана" || echo "📋 Таблица уже существует"
+        );" 2>/dev/null && echo "Table created" || echo "Table exists"
 
-        # Добавляем тестовые данные
-        echo "📝 Добавляем тестовые данные..."
+        echo "Adding sample data..."
         sudo -u postgres psql -d fridgemanager -c "
         INSERT INTO products (name, current_quantity, norm_quantity) VALUES
-        ('Творог', 5, 10),
-        ('Сыр', 12, 15), 
-        ('Молоко', 18, 20),
-        ('Яйца', 25, 30),
-        ('Оливки', 3, 8)
-        ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "✅ Данные добавлены" || echo "📊 Данные уже существуют"
+        ('Cottage Cheese', 5, 10),
+        ('Cheese', 12, 15), 
+        ('Milk', 18, 20),
+        ('Eggs', 25, 30),
+        ('Olives', 3, 8)
+        ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "Data added" || echo "Data exists"
 
-        echo ""
-        echo "🎉 Установка завершена!"
-        echo "➡️ Запустите: fridgemanager"
-        echo "=========================================="
+        echo "Setup completed! Run: fridgemanager"
         EOF
 
-        # Создаем prerm скрипт (перед удалением)
-        cat > package/DEBIAN/prerm << 'EOF'
+                # Prerm script
+                cat > package/DEBIAN/prerm << 'EOF'
         #!/bin/bash
         set -e
 
         echo "=========================================="
-        echo "   Удаление FridgeManager"
+        echo "   Removing FridgeManager"
         echo "=========================================="
 
         if [ "$1" = "remove" ] || [ "$1" = "deconfigure" ]; then
-            read -p "❓ Удалить базу данных fridgemanager? [y/N]: " -n 1 -r
+            read -p "Remove fridgemanager database? [y/N]: " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
-                echo "🗑️ Удаляем базу данных..."
+                echo "Removing database..."
                 sudo -u postgres dropdb --if-exists fridgemanager 2>/dev/null || true
-                echo "✅ База данных удалена"
+                echo "Database removed"
             fi
     
-            echo "🧹 Очищаем конфигурационные файлы..."
+            echo "Cleaning config files..."
             rm -rf /etc/fridgemanager 2>/dev/null || true
             rm -rf /var/lib/fridgemanager 2>/dev/null || true
         fi
 
-        echo "✅ Очистка завершена"
+        echo "Cleanup completed"
         EOF
 
-        # Копируем основные файлы
-        cp build/FridgeManager package/usr/bin/fridgemanager
-        cp Main.qml package/usr/share/fridgemanager/
+                # Copy main files
+                cp build/FridgeManager package/usr/bin/fridgemanager
+                cp Main.qml package/usr/share/fridgemanager/
         
-        # Устанавливаем права
-        chmod 755 package/usr/bin/fridgemanager
-        chmod 755 package/DEBIAN/postinst
-        chmod 755 package/DEBIAN/prerm
+                # Set permissions
+                chmod 755 package/usr/bin/fridgemanager
+                chmod 755 package/DEBIAN/postinst
+                chmod 755 package/DEBIAN/prerm
 
-    - name: 🎁 Build deb package
-      run: |
-        # Собираем пакет
-        dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
-        
-        # Проверяем пакет
-        echo "📦 Информация о пакете:"
-        dpkg --info fridgemanager_1.0.0_amd64.deb
-        
-        echo "📁 Содержимое пакета:"
-        dpkg -c fridgemanager_1.0.0_amd64.deb
-        
-        echo "✅ Размер пакета: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
+            - name: 🎁 Build deb package
+              run: |
+                dpkg-deb --build package fridgemanager_1.0.0_amd64.deb
+                dpkg --info fridgemanager_1.0.0_amd64.deb
+                echo "Package size: $(du -h fridgemanager_1.0.0_amd64.deb | cut -f1)"
 
-        - name: 🧪 Test package installation
-      
-        run: |
-        echo "🧪 Тестируем установку пакета..."
-        
-        # Устанавливаем пакет
-        sudo dpkg -i fridgemanager_1.0.0_amd64.deb || true
-        
-        # Исправляем зависимости если нужно
-        sudo apt-get install -f -y
-        
-        # Проверяем что программа установилась
-        if command -v fridgemanager &> /dev/null; then
-            echo "✅ Программа установлена: fridgemanager"
-        else
-            echo "❌ Программа не установлена"
-            exit 1
-        fi
-        
-        # Проверяем что БД создана
-        if sudo -u postgres psql -l | grep -q fridgemanager; then
-            echo "✅ База данных создана"
-        else
-            echo "❌ База данных не создана"
-        fi
-        
-        # Проверяем что таблица создана
-        if sudo -u postgres psql -d fridgemanager -c "SELECT * FROM products LIMIT 1;" &> /dev/null; then
-            echo "✅ Таблица продуктов создана"
-        else
-            echo "❌ Таблица продуктов не создана"
-        fi
-
- 
-   
-        
-        - name: 🏷️ Create GitHub Release
-           if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-        files: fridgemanager_${{ github.ref_name }}_amd64.deb
-        body: |
-          ## Fridge Manager ${{ github.ref_name }}
-          
-          ### 🚀 Возможности:
-          - Автоматическое создание PostgreSQL базы данных
-          - Учет продуктов ресторана
-          - Приход и расход продуктов
-          - Формирование заявок поставщику
-          - Современный QML интерфейс
-          
-          ### 📦 Установка:
-          ```bash
-          sudo dpkg -i fridgemanager_${{ github.ref_name }}_amd64.deb
-          ```
-          
-          Пакет автоматически:
-          - Установит PostgreSQL если нужно
-          - Создаст базу данных `fridgemanager`
-          - Создаст таблицу продуктов
-          - Добавит тестовые данные
-          
-          ### 🎯 Запуск:
-          ```bash
-          fridgemanager
-          ```
-
-    - name: 📤 Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: fridgemanager-deb-package
-        path: fridgemanager_1.0.0_amd64.deb
-        retention-days: 30
+            - name: 📤 Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                name: fridgemanager-deb-package
+                path: fridgemanager_1.0.0_amd64.deb
+                retention-days: 30

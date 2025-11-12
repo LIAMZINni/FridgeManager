@@ -1,7 +1,7 @@
 Package: fridgemanager
 Version: 1.0.0
 Architecture: amd64
-Maintainer: Your Name <your.email@example.com>
+Maintainer: GitHub Actions <actions@github.com>
 Depends: postgresql, libqt5core5, libqt5qml5, libqt5quick5, libqt5sql5-psql, libpq5
 Section: utils
 Priority: optional
@@ -9,6 +9,8 @@ Description: Restaurant fridge manager with PostgreSQL
  Automatic database setup and product inventory management.
  Features:
   - Auto-creates PostgreSQL database
-  - Product inventory tracking
+  - Product inventory tracking  
   - Supplier order generation
   - Modern QML interface
+ .
+ Homepage: https://github.com/LIAMZINni/FridgeManager
