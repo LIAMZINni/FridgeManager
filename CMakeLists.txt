@@ -10,13 +10,23 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-# Ищем Qt5
-find_package(Qt5 REQUIRED COMPONENTS Core Quick Qml Sql)
+# Указываем возможные пути к Qt5
+set(CMAKE_PREFIX_PATH 
+    "/usr/lib/x86_64-linux-gnu/cmake/Qt5"
+    "/usr/local/qt5"
+    ${CMAKE_PREFIX_PATH}
+)
+
+# Ищем Qt5 компоненты
+find_package(Qt5 COMPONENTS Core Quick Qml Sql REQUIRED)
 
 # Ищем PostgreSQL
 find_package(PostgreSQL REQUIRED)
 
 message(STATUS "Qt5 version: ${Qt5_VERSION}")
+message(STATUS "Qt5 Core found: ${Qt5Core_FOUND}")
+message(STATUS "Qt5 Quick found: ${Qt5Quick_FOUND}")
+message(STATUS "Qt5 Qml found: ${Qt5Qml_FOUND}")
 message(STATUS "PostgreSQL found: ${PostgreSQL_FOUND}")
 
 # Создаем исполняемый файл
