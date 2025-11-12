@@ -1,8 +1,9 @@
 ﻿#include "DatabaseManager.h"
-#include <QDebug>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QDebug>
+#include <QString>
 
 class DatabaseManager::Impl
 {
