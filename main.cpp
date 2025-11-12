@@ -7,8 +7,6 @@
 #include <QDateTime>
 #include <QStandardPaths>
 #include <QDir>
-#include <QFileDialog>
-#include <QMessageBox>
 
 class Product : public QObject
 {
@@ -56,12 +54,14 @@ class FridgeManager : public QObject
         Q_PROPERTY(QQmlListProperty<Product> products READ products NOTIFY productsChanged)
         Q_PROPERTY(bool databaseConnected READ databaseConnected NOTIFY databaseStatusChanged)
         Q_PROPERTY(QString databaseStatus READ databaseStatus NOTIFY databaseStatusChanged)
+        Q_PROPERTY(QString lastSavePath READ lastSavePath NOTIFY lastSavePathChanged)
 
 public:
     explicit FridgeManager(QObject* parent = nullptr)
         : QObject(parent)
         , m_databaseConnected(false)
         , m_databaseStatus("Подключение...")
+        , m_lastSavePath("")
     {
         initializeProducts();
     }
@@ -72,6 +72,7 @@ public:
 
     bool databaseConnected() const { return m_databaseConnected; }
     QString databaseStatus() const { return m_databaseStatus; }
+    QString lastSavePath() const { return m_lastSavePath; }
 
     Q_INVOKABLE void addProductQuantity(int index, int amount) {
         if (index >= 0 && index < m_products.size()) {
@@ -96,25 +97,23 @@ public:
         QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
         QString defaultFileName = defaultPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
 
-        return saveOrderToFile(defaultFileName);
+        QString result = saveOrderToFile(defaultFileName);
+        if (result.startsWith("Успех:")) {
+            m_lastSavePath = defaultFileName;
+            emit lastSavePathChanged();
+        }
+        return result;
     }
 
-    Q_INVOKABLE QString saveOrderToCustomLocation() {
-        // В Linux используем нативный диалог через D-Bus
-#ifdef Q_OS_LINUX
-        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
-        QString fileName = QFileDialog::getSaveFileName(nullptr,
-            "Сохранить заявку",
-            desktopPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt",
-            "Текстовые файлы (*.txt)");
+    Q_INVOKABLE QString saveOrderToPath(const QString& directoryPath) {
+        QString fileName = directoryPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
 
-        if (!fileName.isEmpty()) {
-            return saveOrderToFile(fileName);
+        QString result = saveOrderToFile(fileName);
+        if (result.startsWith("Успех:")) {
+            m_lastSavePath = fileName;
+            emit lastSavePathChanged();
         }
-        return "Отменено пользователем";
-#else
-        return "Функция доступна только в Linux";
-#endif
+        return result;
     }
 
     Q_INVOKABLE QString getDefaultDocumentsPath() {
@@ -129,12 +128,43 @@ public:
         return QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
     }
 
+    Q_INVOKABLE QString getDesktopPath() {
+        return QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    }
+
     Q_INVOKABLE bool fileExists(const QString& filePath) {
         return QFile::exists(filePath);
     }
 
+    Q_INVOKABLE bool directoryExists(const QString& dirPath) {
+        return QDir(dirPath).exists();
+    }
+
+    Q_INVOKABLE bool createDirectory(const QString& dirPath) {
+        return QDir().mkpath(dirPath);
+    }
+
+    Q_INVOKABLE QStringList getAvailableDirectories() {
+        return {
+            getDefaultHomePath() + "/Заявки",
+            getDesktopPath(),
+            getDefaultDocumentsPath(),
+            getDefaultDownloadsPath(),
+            QDir::currentPath() + "/заявки"
+        };
+    }
+
 private:
     QString saveOrderToFile(const QString& filePath) {
+        // Создаем директорию если не существует
+        QFileInfo fileInfo(filePath);
+        QDir dir = fileInfo.dir();
+        if (!dir.exists()) {
+            if (!dir.mkpath(".")) {
+                return "Ошибка: Не удалось создать директорию " + dir.absolutePath();
+            }
+        }
+
         QFile file(filePath);
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -211,11 +241,55 @@ private:
     QList<Product*> m_products;
     bool m_databaseConnected;
     QString m_databaseStatus;
+    QString m_lastSavePath;
 
 signals:
     void productsChanged();
     void databaseStatusChanged();
+    void lastSavePathChanged();
 };
+
+// Улучшенная функция загрузки QML
+bool loadQml(QQmlApplicationEngine& engine) {
+    QStringList possiblePaths;
+
+    // 1. Из текущей директории (для разработки)
+    possiblePaths << QDir::current().absoluteFilePath("Main.qml");
+    possiblePaths << QDir::current().absoluteFilePath("qml/Main.qml");
+
+    // 2. Из системной директории (для установленного пакета)
+    possiblePaths << "/usr/share/fridgemanager/Main.qml";
+    possiblePaths << "/usr/local/share/fridgemanager/Main.qml";
+
+    // 3. Из домашней директории
+    QString homePath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    possiblePaths << homePath + "/.local/share/FridgeManager/Main.qml";
+
+    // 4. Из ресурсов (последняя попытка)
+    possiblePaths << "qrc:/Main.qml";
+
+    for (const QString& path : possiblePaths) {
+        qDebug() << "Checking QML path:" << path;
+
+        if (path.startsWith("qrc:")) {
+            engine.load(QUrl(path));
+        }
+        else if (QFile::exists(path)) {
+            qDebug() << "Loading from filesystem:" << path;
+            engine.load(QUrl::fromLocalFile(path));
+        }
+        else {
+            continue;
+        }
+
+        if (!engine.rootObjects().isEmpty()) {
+            qDebug() << "✅ Successfully loaded QML from:" << path;
+            return true;
+        }
+    }
+
+    return false;
+}
 
 int main(int argc, char* argv[])
 {
@@ -236,40 +310,9 @@ int main(int argc, char* argv[])
 
     qDebug() << "Loading QML...";
 
-    // УМНАЯ ЗАГРУЗКА QML - пробуем разные пути
-    QStringList possiblePaths;
-
-    // 1. Из текущей директории (для разработки)
-    possiblePaths << QDir::current().absoluteFilePath("Main.qml");
-
-    // 2. Из системной директории (для установленного пакета)
-    possiblePaths << "/usr/share/fridgemanager/Main.qml";
-
-    // 3. Из домашней директории
-    possiblePaths << QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/Main.qml";
-
-    QString qmlPath;
-    for (const QString& path : possiblePaths) {
-        if (QFile::exists(path)) {
-            qmlPath = path;
-            qDebug() << "Found QML at:" << path;
-            break;
-        }
-    }
-
-    if (!qmlPath.isEmpty()) {
-        qDebug() << "Loading QML from file:" << qmlPath;
-        engine.load(QUrl::fromLocalFile(qmlPath));
-    }
-    else {
-        qDebug() << "QML file not found in standard locations, trying resource...";
-        // Последняя попытка - из ресурсов
-        engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
-    }
-
-    if (engine.rootObjects().isEmpty()) {
+    if (!loadQml(engine)) {
         qDebug() << "❌ FAILED TO LOAD QML!";
-        qDebug() << "Checked paths:" << possiblePaths;
+        qDebug() << "Please ensure Main.qml exists in one of the standard locations";
         delete manager;
         return -1;
     }
