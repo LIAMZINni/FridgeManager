@@ -44,5 +44,20 @@ target_link_libraries(FridgeManager
     ${PostgreSQL_LIBRARIES}
 )
 
+# Добавляем QML файлы в ресурсы
+qt5_add_resources(FridgeManager "qml"
+    PREFIX "/"
+    FILES
+        "Main.qml"
+)
+
+# Установка для Linux
+install(TARGETS FridgeManager
+    RUNTIME DESTINATION bin
+)
+
+install(FILES Main.qml
+    DESTINATION share/fridgemanager
+)
 # Подключаем заголовочные файлы
 target_include_directories(FridgeManager PRIVATE ${PostgreSQL_INCLUDE_DIRS})

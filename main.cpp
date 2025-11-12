@@ -145,14 +145,28 @@ public:
     }
 
     Q_INVOKABLE QStringList getAvailableDirectories() {
-        return {
-            getDefaultHomePath() + "/Заявки",
-            getDesktopPath(),
-            getDefaultDocumentsPath(),
-            getDefaultDownloadsPath(),
-            QDir::currentPath() + "/заявки"
-        };
+        QStringList dirs;
+        dirs << getDefaultHomePath() + "/Заявки";
+        dirs << getDesktopPath();
+        dirs << getDefaultDocumentsPath();
+        dirs << getDefaultDownloadsPath();
+        dirs << QDir::currentPath() + "/заявки";
+
+        // Фильтруем только существующие директории или те, которые можно создать
+        QStringList availableDirs;
+        for (const QString& dir : dirs) {
+            if (QDir(dir).exists() || QDir().mkpath(dir)) {
+                availableDirs << dir;
+            }
+        }
+
+        return availableDirs;
     }
+
+signals:
+    void productsChanged();
+    void databaseStatusChanged();
+    void lastSavePathChanged();
 
 private:
     QString saveOrderToFile(const QString& filePath) {
@@ -169,7 +183,12 @@ private:
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
+            // Для Qt5 используем setCodec вместо setEncoding
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+            stream.setCodec("UTF-8");
+#else
             stream.setEncoding(QStringConverter::Utf8);
+#endif
 
             stream << "ЗАЯВКА ДЛЯ ПОСТАВЩИКА\n";
             stream << "=====================\n";
@@ -242,11 +261,6 @@ private:
     bool m_databaseConnected;
     QString m_databaseStatus;
     QString m_lastSavePath;
-
-signals:
-    void productsChanged();
-    void databaseStatusChanged();
-    void lastSavePathChanged();
 };
 
 // Улучшенная функция загрузки QML
