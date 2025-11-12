@@ -61,7 +61,7 @@ jobs:
         mkdir -p package/usr/bin
         mkdir -p package/usr/share/fridgemanager
 
-        # Control file (LATIN ONLY!)
+        # Control file
         cat > package/DEBIAN/control << 'EOF'
         Package: fridgemanager
         Version: 1.0.0
@@ -72,13 +72,6 @@ jobs:
         Priority: optional
         Description: Restaurant fridge manager with PostgreSQL
          Automatic database setup and product inventory management.
-         Features:
-          - Auto-creates PostgreSQL database
-          - Product inventory tracking
-          - Supplier order generation
-          - Modern QML interface
-         .
-         Homepage: https://github.com/LIAMZINni/FridgeManager
         EOF
 
                 # Postinst script
@@ -107,23 +100,10 @@ jobs:
         sudo -u postgres createdb fridgemanager 2>/dev/null && echo "Database created" || echo "Database exists"
 
         echo "Creating products table..."
-        sudo -u postgres psql -d fridgemanager -c "
-        CREATE TABLE IF NOT EXISTS products (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) UNIQUE NOT NULL,
-            current_quantity INTEGER NOT NULL DEFAULT 0,
-            norm_quantity INTEGER NOT NULL
-        );" 2>/dev/null && echo "Table created" || echo "Table exists"
+        sudo -u postgres psql -d fridgemanager -c "CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(100) UNIQUE NOT NULL, current_quantity INTEGER NOT NULL DEFAULT 0, norm_quantity INTEGER NOT NULL);" 2>/dev/null && echo "Table created" || echo "Table exists"
 
         echo "Adding sample data..."
-        sudo -u postgres psql -d fridgemanager -c "
-        INSERT INTO products (name, current_quantity, norm_quantity) VALUES
-        ('Cottage Cheese', 5, 10),
-        ('Cheese', 12, 15), 
-        ('Milk', 18, 20),
-        ('Eggs', 25, 30),
-        ('Olives', 3, 8)
-        ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "Data added" || echo "Data exists"
+        sudo -u postgres psql -d fridgemanager -c "INSERT INTO products (name, current_quantity, norm_quantity) VALUES ('Cottage Cheese', 5, 10), ('Cheese', 12, 15), ('Milk', 18, 20), ('Eggs', 25, 30), ('Olives', 3, 8) ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "Data added" || echo "Data exists"
 
         echo "Setup completed! Run: fridgemanager"
         EOF
@@ -145,7 +125,6 @@ jobs:
                 sudo -u postgres dropdb --if-exists fridgemanager 2>/dev/null || true
                 echo "Database removed"
             fi
-    
             echo "Cleaning config files..."
             rm -rf /etc/fridgemanager 2>/dev/null || true
             rm -rf /var/lib/fridgemanager 2>/dev/null || true
