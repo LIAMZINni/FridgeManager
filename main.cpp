@@ -132,18 +132,23 @@ public:
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream.setEncoding(QStringConverter::Utf8);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            stream.setEncoding(QStringConverter::Utf8);  // Qt6
+#else
+            stream.setCodec("UTF-8");  // Qt5
+#endif
 
+            // Заголовок заявки
             stream << "ЗАЯВКА ДЛЯ ПОСТАВЩИКА\n";
             stream << "=====================\n";
             stream << "Ресторан: 'Гурман'\n";
             stream << "Дата: " << QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm") << "\n";
-            stream << "База данных: " << (m_databaseConnected ? "Подключена" : "Не подключена") << "\n";
             stream << "=====================\n\n";
 
             bool hasOrders = false;
             int totalPacks = 0;
 
+            // Продукты для заказа
             stream << "ПРОДУКТЫ ДЛЯ ЗАКАЗА:\n";
             stream << "-------------------\n";
 
