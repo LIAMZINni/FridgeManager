@@ -8,7 +8,7 @@
 #include <QStandardPaths>
 #include <QDir>
 
-// ДОБАВЬТЕ ЭТОТ INCLUDE
+
 #include "DatabaseManager.h"
 
 class Product : public QObject
@@ -319,7 +319,7 @@ private:
     }
 
     QList<Product*> m_products;
-    // ДОБАВЬТЕ: член DatabaseManager
+    
     DatabaseManager m_dbManager;
     bool m_databaseConnected;
     QString m_databaseStatus;
