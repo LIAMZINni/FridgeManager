@@ -2,7 +2,6 @@
 #define DATABASEMANAGER_H
 
 #include <QObject>
-#include <QString>
 #include <QVector>
 
 struct ProductData {
@@ -11,8 +10,8 @@ struct ProductData {
     int currentQuantity;
     int normQuantity;
 
-    ProductData(int i = 0, const QString& n = "", int curr = 0, int norm = 0)
-        : id(i), name(n), currentQuantity(curr), normQuantity(norm) {
+    ProductData(int id = 0, const QString& name = "", int currentQty = 0, int normQty = 0)
+        : id(id), name(name), currentQuantity(currentQty), normQuantity(normQty) {
     }
 };
 
@@ -28,7 +27,6 @@ public:
     void disconnectFromDatabase();
     bool isConnected() const;
 
-    // Операции с продуктами
     QVector<ProductData> getAllProducts();
     bool updateProductQuantity(int productId, int newQuantity);
     bool addProductQuantity(int productId, int amount);
@@ -41,4 +39,4 @@ private:
     Impl* d;
 };
 
-#endif
+#endif // DATABASEMANAGER_H
