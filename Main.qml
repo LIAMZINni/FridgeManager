@@ -469,7 +469,7 @@ ApplicationWindow {
 
                     Button {
                         text: "💾 Быстрое сохранение"
-                        tooltip: "Сохранить в домашнюю папку"
+                        // Убрано свойство tooltip для Qt5
                         onClicked: {
                             var result = fridgeManager.generateOrder();
                             dialogMessage.text = result;
@@ -479,7 +479,7 @@ ApplicationWindow {
 
                     Button {
                         text: "📁 Выбрать папку"
-                        tooltip: "Выбрать из списка доступных папок"
+                        // Убрано свойство tooltip для Qt5
                         onClicked: {
                             directoryDialog.open();
                         }
@@ -487,7 +487,7 @@ ApplicationWindow {
 
                     Button {
                         text: "💾 Сохранить в выбранную"
-                        tooltip: "Сохранить в выбранную папку из списка"
+                        // Убрано свойство tooltip для Qt5
                         onClicked: {
                             if (directoryCombo.currentText) {
                                 var result = fridgeManager.saveOrderToPath(directoryCombo.currentText);
@@ -502,7 +502,7 @@ ApplicationWindow {
 
                     Button {
                         text: "📁 Создать папку"
-                        tooltip: "Создать новую папку для сохранения"
+                        // Убрано свойство tooltip для Qt5
                         onClicked: {
                             createFolderDialog.open();
                         }
