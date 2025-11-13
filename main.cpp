@@ -8,6 +8,9 @@
 #include <QStandardPaths>
 #include <QDir>
 
+// ДОБАВЬТЕ ЭТОТ INCLUDE
+#include "DatabaseManager.h"
+
 class Product : public QObject
 {
     Q_OBJECT
@@ -60,10 +63,11 @@ public:
     explicit FridgeManager(QObject* parent = nullptr)
         : QObject(parent)
         , m_databaseConnected(false)
-        , m_databaseStatus("Подключение...")
+        , m_databaseStatus("Подключение к БД...")
         , m_lastSavePath("")
     {
-        initializeProducts();
+        // ИЗМЕНИТЕ: используем инициализацию через БД
+        initializeDatabase();
     }
 
     QQmlListProperty<Product> products() {
@@ -77,7 +81,16 @@ public:
     Q_INVOKABLE void addProductQuantity(int index, int amount) {
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
-            product->setCurrentQuantity(product->currentQuantity() + amount);
+
+            // ИЗМЕНИТЕ: обновляем в БД если подключены
+            if (m_databaseConnected) {
+                if (m_dbManager.addProductQuantity(product->id(), amount)) {
+                    product->setCurrentQuantity(product->currentQuantity() + amount);
+                }
+            }
+            else {
+                product->setCurrentQuantity(product->currentQuantity() + amount);
+            }
             emit productsChanged();
         }
     }
@@ -86,14 +99,22 @@ public:
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
             if (product->currentQuantity() >= amount) {
-                product->setCurrentQuantity(product->currentQuantity() - amount);
+                // ИЗМЕНИТЕ: обновляем в БД если подключены
+                if (m_databaseConnected) {
+                    if (m_dbManager.removeProductQuantity(product->id(), amount)) {
+                        product->setCurrentQuantity(product->currentQuantity() - amount);
+                    }
+                }
+                else {
+                    product->setCurrentQuantity(product->currentQuantity() - amount);
+                }
                 emit productsChanged();
             }
         }
     }
 
+    // Остальные методы без изменений...
     Q_INVOKABLE QString generateOrder() {
-        // Сохраняем в домашнюю директорию по умолчанию
         QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
         QString defaultFileName = defaultPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
 
@@ -152,7 +173,6 @@ public:
         dirs << getDefaultDownloadsPath();
         dirs << QDir::currentPath() + "/заявки";
 
-        // Фильтруем только существующие директории или те, которые можно создать
         QStringList availableDirs;
         for (const QString& dir : dirs) {
             if (QDir(dir).exists() || QDir().mkpath(dir)) {
@@ -169,8 +189,63 @@ signals:
     void lastSavePathChanged();
 
 private:
+    // ДОБАВЬТЕ: метод инициализации БД
+    void initializeDatabase() {
+        qDebug() << "🔄 Initializing database connection...";
+
+        if (m_dbManager.connectToDatabase() && m_dbManager.isConnected()) {
+            m_databaseConnected = true;
+            m_databaseStatus = "✅ База данных PostgreSQL подключена";
+
+            // Загружаем продукты из БД
+            auto productsData = m_dbManager.getAllProducts();
+            if (!productsData.isEmpty()) {
+                loadProductsFromDatabase(productsData);
+                qDebug() << "✅ Загружено продуктов из БД:" << productsData.size();
+            }
+            else {
+                m_databaseStatus = "❌ БД подключена, но продукты не найдены";
+                initializeLocalProducts();
+            }
+        }
+        else {
+            // Если БД недоступна - локальный режим
+            m_databaseConnected = false;
+            m_databaseStatus = "📋 Локальный режим (БД недоступна)";
+            qDebug() << "❌ PostgreSQL недоступна:" << m_dbManager.getLastError();
+            initializeLocalProducts();
+        }
+        emit databaseStatusChanged();
+    }
+
+    // ДОБАВЬТЕ: метод загрузки из БД
+    void loadProductsFromDatabase(const QVector<ProductData>& productsData) {
+        m_products.clear();
+        for (const auto& productData : productsData) {
+            m_products.append(new Product(
+                productData.id,
+                productData.name,
+                productData.currentQuantity,
+                productData.normQuantity,
+                this
+            ));
+        }
+    }
+
+    // ИЗМЕНИТЕ: переименуйте initializeProducts в initializeLocalProducts
+    void initializeLocalProducts() {
+        m_products.clear();
+
+        m_products.append(new Product(1, "Творог", 5, 10, this));
+        m_products.append(new Product(2, "Сыр", 12, 15, this));
+        m_products.append(new Product(3, "Молоко", 18, 20, this));
+        m_products.append(new Product(4, "Яйца", 25, 30, this));
+        m_products.append(new Product(5, "Оливки", 3, 8, this));
+
+        qDebug() << "📋 Используются локальные тестовые данные";
+    }
+
     QString saveOrderToFile(const QString& filePath) {
-        // Создаем директорию если не существует
         QFileInfo fileInfo(filePath);
         QDir dir = fileInfo.dir();
         if (!dir.exists()) {
@@ -183,7 +258,6 @@ private:
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
-            // Для Qt5 используем setCodec вместо setEncoding
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
             stream.setCodec("UTF-8");
 #else
@@ -194,6 +268,7 @@ private:
             stream << "=====================\n";
             stream << "Ресторан: 'Гурман'\n";
             stream << "Дата: " << QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm") << "\n";
+            stream << "Статус БД: " << m_databaseStatus << "\n";  // ДОБАВЬТЕ статус БД
             stream << "=====================\n\n";
 
             bool hasOrders = false;
@@ -219,7 +294,6 @@ private:
                 stream << "ИТОГО: " << totalPacks << " упаковок\n";
             }
 
-            // Текущие остатки
             stream << "\n=====================\n";
             stream << "ТЕКУЩИЕ ОСТАТКИ:\n";
             stream << "-------------------\n";
@@ -244,42 +318,24 @@ private:
         }
     }
 
-    void initializeProducts() {
-        m_products.clear();
-
-        m_products.append(new Product(1, "Творог", 5, 10, this));
-        m_products.append(new Product(2, "Сыр", 12, 15, this));
-        m_products.append(new Product(3, "Молоко", 18, 20, this));
-        m_products.append(new Product(4, "Яйца", 25, 30, this));
-        m_products.append(new Product(5, "Оливки", 3, 8, this));
-
-        m_databaseStatus = "Локальный режим";
-        emit databaseStatusChanged();
-    }
-
     QList<Product*> m_products;
+    // ДОБАВЬТЕ: член DatabaseManager
+    DatabaseManager m_dbManager;
     bool m_databaseConnected;
     QString m_databaseStatus;
     QString m_lastSavePath;
 };
 
-// Улучшенная функция загрузки QML
+// Остальная часть файла без изменений...
 bool loadQml(QQmlApplicationEngine& engine) {
     QStringList possiblePaths;
 
-    // 1. Из текущей директории (для разработки)
     possiblePaths << QDir::current().absoluteFilePath("Main.qml");
     possiblePaths << QDir::current().absoluteFilePath("qml/Main.qml");
-
-    // 2. Из системной директории (для установленного пакета)
     possiblePaths << "/usr/share/fridgemanager/Main.qml";
     possiblePaths << "/usr/local/share/fridgemanager/Main.qml";
-
-    // 3. Из домашней директории
     QString homePath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
     possiblePaths << homePath + "/.local/share/FridgeManager/Main.qml";
-
-    // 4. Из ресурсов (последняя попытка)
     possiblePaths << "qrc:/Main.qml";
 
     for (const QString& path : possiblePaths) {
