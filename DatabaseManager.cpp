@@ -31,10 +31,10 @@ bool DatabaseManager::connectToDatabase()
 
     // Создаем подключение
     d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection");
-    d->db.setHostName("localhost");
-    d->db.setPort(5432);
+    d->db.setHostName("");
+    d->db.setPort(-1);
     d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("postgres");
+    d->db.setUserName("");
     d->db.setPassword("");
 
     // Добавляем отладочную информацию
