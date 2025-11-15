@@ -29,39 +29,95 @@ bool DatabaseManager::connectToDatabase()
 {
     disconnectFromDatabase();
 
-    // Создаем подключение
+    // ⭐ ВАЖНО: Пробуем разные методы подключения
+
+    // Сначала пробуем peer authentication (самый надежный в Linux)
     d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection");
-    d->db.setHostName("");
-    d->db.setPort(-1);
+    d->db.setHostName("");        // ПУСТОЙ для peer auth
+    d->db.setPort(-1);            // -1 для использования default порта
     d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("");
-    d->db.setPassword("");
+    d->db.setUserName("");        // ПУСТОЙ для peer auth
+    d->db.setPassword("");        // ПУСТОЙ для peer auth
 
-    // Добавляем отладочную информацию
-    qDebug() << "🔌 Attempting to connect to PostgreSQL...";
-    qDebug() << "   Host:" << d->db.hostName();
-    qDebug() << "   Port:" << d->db.port();
-    qDebug() << "   Database:" << d->db.databaseName();
-    qDebug() << "   Username:" << d->db.userName();
+    qDebug() << "🔌 Attempting PostgreSQL peer authentication...";
+    qDebug() << "   Method: Peer authentication (no password)";
+    qDebug() << "   Database: fridgemanager";
 
-    if (!d->db.open()) {
-        d->lastError = d->db.lastError().text();
-        qWarning() << "❌ Failed to connect to PostgreSQL:" << d->lastError;
-        d->connected = false;
-        return false;
+    if (d->db.open()) {
+        // Проверяем что можем выполнить запрос
+        QSqlQuery testQuery("SELECT version()", d->db);
+        if (testQuery.exec() && testQuery.next()) {
+            qDebug() << "✅ Successfully connected via peer authentication";
+            qDebug() << "   PostgreSQL:" << testQuery.value(0).toString();
+            d->connected = true;
+            return true;
+        }
+        else {
+            d->db.close();
+        }
     }
 
-    // Проверяем что можем выполнить запрос
-    QSqlQuery testQuery("SELECT version()", d->db);
-    if (testQuery.exec() && testQuery.next()) {
-        qDebug() << "✅ Successfully connected to PostgreSQL:" << testQuery.value(0).toString();
+    qWarning() << "❌ Peer authentication failed:" << d->db.lastError().text();
+    QSqlDatabase::removeDatabase("fridge_connection");
+
+    // 🔄 Пробуем подключение через localhost с портом 5432
+    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_localhost");
+    d->db.setHostName("localhost");
+    d->db.setPort(5432);          // ⭐ ВАЖНО: правильный порт!
+    d->db.setDatabaseName("fridgemanager");
+    d->db.setUserName("postgres");
+    d->db.setPassword("");        // пустой пароль
+
+    qDebug() << "🔄 Trying localhost connection...";
+    qDebug() << "   Host: localhost";
+    qDebug() << "   Port: 5432";
+    qDebug() << "   Database: fridgemanager";
+    qDebug() << "   Username: postgres";
+
+    if (d->db.open()) {
+        QSqlQuery testQuery("SELECT version()", d->db);
+        if (testQuery.exec() && testQuery.next()) {
+            qDebug() << "✅ Successfully connected via localhost";
+            d->connected = true;
+            return true;
+        }
+        else {
+            d->db.close();
+        }
     }
-    else {
-        qWarning() << "⚠️ Connected but cannot execute queries:" << testQuery.lastError().text();
-        d->db.close();
-        d->connected = false;
-        return false;
+
+    qWarning() << "❌ Localhost connection failed:" << d->db.lastError().text();
+    QSqlDatabase::removeDatabase("fridge_connection_localhost");
+
+    // 🔄 Пробуем подключение через socket
+    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_socket");
+    d->db.setHostName("/var/run/postgresql");  // Socket путь
+    d->db.setPort(-1);                         // -1 для socket
+    d->db.setDatabaseName("fridgemanager");
+    d->db.setUserName("postgres");
+    d->db.setPassword("");                     // пустой пароль
+
+    qDebug() << "🔄 Trying socket connection...";
+    qDebug() << "   Socket: /var/run/postgresql";
+    qDebug() << "   Database: fridgemanager";
+
+    if (d->db.open()) {
+        QSqlQuery testQuery("SELECT version()", d->db);
+        if (testQuery.exec() && testQuery.next()) {
+            qDebug() << "✅ Successfully connected via socket";
+            d->connected = true;
+            return true;
+        }
+        else {
+            d->db.close();
+        }
     }
+
+    qWarning() << "❌ All connection attempts failed";
+    d->lastError = "Could not connect to PostgreSQL using any method";
+    d->connected = false;
+    return false;
+}
 
     // Проверяем что таблица products существует
     QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
