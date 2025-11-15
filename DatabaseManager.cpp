@@ -49,8 +49,24 @@ bool DatabaseManager::connectToDatabase()
         if (testQuery.exec() && testQuery.next()) {
             qDebug() << "✅ Successfully connected via peer authentication";
             qDebug() << "   PostgreSQL:" << testQuery.value(0).toString();
-            d->connected = true;
-            return true;
+
+            // Проверяем что таблица products существует
+            QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
+            if (tableCheck.exec() && tableCheck.next()) {
+                bool tableExists = tableCheck.value(0).toBool();
+                if (tableExists) {
+                    qDebug() << "✅ Products table exists";
+                    d->connected = true;
+                    return true;
+                }
+                else {
+                    qWarning() << "❌ Products table does not exist";
+                    d->lastError = "Products table not found";
+                    d->db.close();
+                    d->connected = false;
+                    return false;
+                }
+            }
         }
         else {
             d->db.close();
@@ -78,8 +94,21 @@ bool DatabaseManager::connectToDatabase()
         QSqlQuery testQuery("SELECT version()", d->db);
         if (testQuery.exec() && testQuery.next()) {
             qDebug() << "✅ Successfully connected via localhost";
-            d->connected = true;
-            return true;
+
+            // Проверяем что таблица products существует
+            QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
+            if (tableCheck.exec() && tableCheck.next() && tableCheck.value(0).toBool()) {
+                qDebug() << "✅ Products table exists";
+                d->connected = true;
+                return true;
+            }
+            else {
+                qWarning() << "❌ Products table does not exist";
+                d->lastError = "Products table not found";
+                d->db.close();
+                d->connected = false;
+                return false;
+            }
         }
         else {
             d->db.close();
@@ -105,8 +134,21 @@ bool DatabaseManager::connectToDatabase()
         QSqlQuery testQuery("SELECT version()", d->db);
         if (testQuery.exec() && testQuery.next()) {
             qDebug() << "✅ Successfully connected via socket";
-            d->connected = true;
-            return true;
+
+            // Проверяем что таблица products существует
+            QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
+            if (tableCheck.exec() && tableCheck.next() && tableCheck.value(0).toBool()) {
+                qDebug() << "✅ Products table exists";
+                d->connected = true;
+                return true;
+            }
+            else {
+                qWarning() << "❌ Products table does not exist";
+                d->lastError = "Products table not found";
+                d->db.close();
+                d->connected = false;
+                return false;
+            }
         }
         else {
             d->db.close();
@@ -117,27 +159,6 @@ bool DatabaseManager::connectToDatabase()
     d->lastError = "Could not connect to PostgreSQL using any method";
     d->connected = false;
     return false;
-}
-
-    // Проверяем что таблица products существует
-    QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
-    if (tableCheck.exec() && tableCheck.next()) {
-        bool tableExists = tableCheck.value(0).toBool();
-        if (tableExists) {
-            qDebug() << "✅ Products table exists";
-        }
-        else {
-            qWarning() << "❌ Products table does not exist";
-            d->lastError = "Products table not found";
-            d->db.close();
-            d->connected = false;
-            return false;
-        }
-    }
-
-    qDebug() << "🎉 Database connection established and verified";
-    d->connected = true;
-    return true;
 }
 
 void DatabaseManager::disconnectFromDatabase()
