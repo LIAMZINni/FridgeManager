@@ -36,7 +36,7 @@ bool DatabaseManager::connectToDatabase()
     d->db.setHostName("");        // ПУСТОЙ для peer auth
     d->db.setPort(-1);            // -1 для использования default порта
     d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("");        // ПУСТОЙ для peer auth
+    d->db.setUserName("postgres");        // ПУСТОЙ для peer auth
     d->db.setPassword("");        // ПУСТОЙ для peer auth
 
     qDebug() << "🔌 Attempting PostgreSQL peer authentication...";
