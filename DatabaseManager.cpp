@@ -4,7 +4,7 @@
 #include <QSqlError>
 #include <QDebug>
 #include <QString>
-#include <QThread>  // ⭐ ДОБАВЬТЕ ЭТОТ INCLUDE
+#include <QThread>
 
 class DatabaseManager::Impl
 {
@@ -26,145 +26,75 @@ DatabaseManager::~DatabaseManager()
     delete d;
 }
 
-// ⭐ РЕАЛИЗАЦИЯ safeDisconnect
-void DatabaseManager::safeDisconnect(const QString& connectionName)
-{
-    if (d->db.isValid() && d->db.isOpen()) {
-        d->db.close();
-    }
-    // Даем время для закрытия соединения
-    QThread::msleep(100);
-    QSqlDatabase::removeDatabase(connectionName);
-}
-
-bool DatabaseManager::verifyConnection()
-{
-    if (!d->db.isOpen()) {
-        qWarning() << "❌ Database not open for verification";
-        return false;
-    }
-
-    // Простая проверка - пытаемся выполнить простой запрос
-    QSqlQuery testQuery("SELECT 1", d->db);
-    if (testQuery.exec() && testQuery.next()) {
-        qDebug() << "✅ Basic connection test passed";
-
-        // Проверяем существование таблицы products
-        QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
-        if (tableCheck.exec() && tableCheck.next()) {
-            bool tableExists = tableCheck.value(0).toBool();
-            if (tableExists) {
-                qDebug() << "✅ Products table exists";
-                return true;
-            }
-            else {
-                qWarning() << "❌ Products table does not exist";
-                return false;
-            }
-        }
-        else {
-            qWarning() << "❌ Cannot check products table";
-            return false;
-        }
-    }
-    else {
-        qWarning() << "❌ Basic connection test failed";
-        return false;
-    }
-}
-
 bool DatabaseManager::connectToDatabase()
 {
     disconnectFromDatabase();
 
-    qDebug() << "🔌 Starting PostgreSQL connection attempts...";
+    qDebug() << "🔌 Connecting to PostgreSQL...";
 
-    // 1. Peer authentication с пользователем postgres
-    QString connectionName = "fridge_connection_peer";
-    d->db = QSqlDatabase::addDatabase("QPSQL", connectionName);
-    d->db.setConnectOptions("connect_timeout=3");
-    d->db.setHostName("");  // пустой для peer auth
-    d->db.setPort(-1);      // -1 для default порта
-    d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("postgres");
-    d->db.setPassword("");
-
-    qDebug() << "🔄 Attempting peer authentication as user 'postgres'...";
-
-    if (d->db.open()) {
-        if (verifyConnection()) {
-            qDebug() << "✅ Connected via peer authentication (postgres user)";
-            d->connected = true;
-            return true;
-        }
-        safeDisconnect(connectionName);
-    }
-    else {
-        QSqlDatabase::removeDatabase(connectionName);
-    }
-
-    // 2. Localhost подключение
-    connectionName = "fridge_connection_local";
-    d->db = QSqlDatabase::addDatabase("QPSQL", connectionName);
-    d->db.setConnectOptions("connect_timeout=3");
+    // Используем password authentication с localhost
+    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection");
+    d->db.setConnectOptions("connect_timeout=5");
     d->db.setHostName("localhost");
     d->db.setPort(5432);
     d->db.setDatabaseName("fridgemanager");
     d->db.setUserName("postgres");
-    d->db.setPassword("");
+    d->db.setPassword("postgres");  // Пароль: postgres
 
-    qDebug() << "🔄 Attempting localhost connection...";
-
-    if (d->db.open()) {
-        if (verifyConnection()) {
-            qDebug() << "✅ Connected via localhost";
-            d->connected = true;
-            return true;
-        }
-        safeDisconnect(connectionName);
-    }
-    else {
-        QSqlDatabase::removeDatabase(connectionName);
-    }
-
-    // 3. Socket подключение
-    connectionName = "fridge_connection_socket";
-    d->db = QSqlDatabase::addDatabase("QPSQL", connectionName);
-    d->db.setConnectOptions("connect_timeout=3");
-    d->db.setHostName("/var/run/postgresql");
-    d->db.setPort(-1);
-    d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("postgres");
-    d->db.setPassword("");
-
-    qDebug() << "🔄 Attempting socket connection...";
+    qDebug() << "   Host: localhost";
+    qDebug() << "   Port: 5432";
+    qDebug() << "   Database: fridgemanager";
+    qDebug() << "   Username: postgres";
+    qDebug() << "   Password: ***";
 
     if (d->db.open()) {
-        if (verifyConnection()) {
-            qDebug() << "✅ Connected via socket";
-            d->connected = true;
-            return true;
+        // Проверяем подключение
+        QSqlQuery testQuery("SELECT version()", d->db);
+        if (testQuery.exec() && testQuery.next()) {
+            qDebug() << "✅ PostgreSQL:" << testQuery.value(0).toString().split(',')[0];
+
+            // Проверяем таблицу products
+            QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
+            if (tableCheck.exec() && tableCheck.next() && tableCheck.value(0).toBool()) {
+                qDebug() << "✅ Products table exists";
+
+                // Считаем продукты
+                QSqlQuery countQuery("SELECT COUNT(*) FROM products", d->db);
+                if (countQuery.exec() && countQuery.next()) {
+                    qDebug() << "📊 Products count:" << countQuery.value(0).toInt();
+                }
+
+                d->connected = true;
+                return true;
+            }
+            else {
+                qWarning() << "❌ Products table not found";
+            }
         }
-        safeDisconnect(connectionName);
-    }
-    else {
-        QSqlDatabase::removeDatabase(connectionName);
+        else {
+            qWarning() << "❌ Cannot execute queries:" << testQuery.lastError().text();
+        }
+
+        d->db.close();
     }
 
-    qWarning() << "❌ All PostgreSQL connection attempts failed";
-    d->lastError = "Could not establish database connection";
+    qWarning() << "❌ PostgreSQL connection failed:" << d->db.lastError().text();
+    d->lastError = "Database connection failed";
     d->connected = false;
+
+    // Удаляем соединение
+    QSqlDatabase::removeDatabase("fridge_connection");
     return false;
 }
 
 void DatabaseManager::disconnectFromDatabase()
 {
     if (d->db.isValid() && d->db.isOpen()) {
-        QString connectionName = d->db.connectionName();
         d->db.close();
-        safeDisconnect(connectionName);
+        qDebug() << "🔌 Database connection closed";
     }
     d->connected = false;
+    QSqlDatabase::removeDatabase("fridge_connection");
 }
 
 bool DatabaseManager::isConnected() const

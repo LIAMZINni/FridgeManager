@@ -24,22 +24,21 @@ public:
     explicit DatabaseManager(QObject* parent = nullptr);
     ~DatabaseManager();
 
+    // Подключение к базе данных
     bool connectToDatabase();
     void disconnectFromDatabase();
     bool isConnected() const;
 
+    // Операции с продуктами
     QVector<ProductData> getAllProducts();
     bool updateProductQuantity(int productId, int newQuantity);
     bool addProductQuantity(int productId, int amount);
     bool removeProductQuantity(int productId, int amount);
 
+    // Информация об ошибках
     QString getLastError() const;
 
 private:
-    // ⭐ ДОБАВЬТЕ ЭТО ОБЪЯВЛЕНИЕ
-    void safeDisconnect(const QString& connectionName);
-    bool verifyConnection();
-
     class Impl;
     Impl* d;
 };
