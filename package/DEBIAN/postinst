@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS products (
     norm_quantity INTEGER NOT NULL
 );" 2>/dev/null && echo "✅ Таблица создана" || echo "📋 Таблица уже существует"
 
+# Даем права пользователю ubuntu
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fridgemanager TO ubuntu;" 2>/dev/null && echo "✅ Права выданы пользователю ubuntu" || echo "⚠️ Права уже выданы"
+
 echo "📝 Добавляем тестовые данные..."
 sudo -u postgres psql -d fridgemanager -c "
 INSERT INTO products (name, current_quantity, norm_quantity) VALUES
