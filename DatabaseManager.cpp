@@ -31,81 +31,105 @@ bool DatabaseManager::connectToDatabase()
 
     qDebug() << "🔌 Starting PostgreSQL connection attempts...";
 
-    // 🔄 Пробуем разные методы подключения
+    // 🔄 Пробуем разные методы подключения в порядке приоритета
 
-    // 1. Peer authentication с пользователем postgres
-    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection");
-    d->db.setConnectOptions("connect_timeout=5");
+    // 1. Peer authentication с текущим системным пользователем
+    QString currentUser = qgetenv("USER");
+    if (currentUser.isEmpty()) {
+        currentUser = "postgres";
+    }
+
+    qDebug() << "👤 Current system user:" << currentUser;
+
+    // Метод 1: Peer authentication (самый надежный)
+    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_peer");
+    d->db.setConnectOptions("connect_timeout=3");
+    d->db.setHostName("");  // пустой для peer auth
+    d->db.setPort(-1);      // -1 для default порта
+    d->db.setDatabaseName("fridgemanager");
+    d->db.setUserName(currentUser);  // используем текущего системного пользователя
+    d->db.setPassword("");
+
+    qDebug() << "🔄 Attempting peer authentication as user:" << currentUser;
+
+    if (d->db.open()) {
+        if (verifyConnection()) {
+            qDebug() << "✅ Connected via peer authentication";
+            d->connected = true;
+            return true;
+        }
+        d->db.close();
+    }
+    else {
+        qDebug() << "❌ Peer auth failed:" << d->db.lastError().text();
+    }
+    QSqlDatabase::removeDatabase("fridge_connection_peer");
+
+    // Метод 2: Peer authentication с пользователем postgres
+    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_postgres");
+    d->db.setConnectOptions("connect_timeout=3");
+    d->db.setHostName("");
+    d->db.setPort(-1);
+    d->db.setDatabaseName("fridgemanager");
+    d->db.setUserName("postgres");
+    d->db.setPassword("");
+
+    qDebug() << "🔄 Attempting peer authentication as user: postgres";
+
+    if (d->db.open()) {
+        if (verifyConnection()) {
+            qDebug() << "✅ Connected via peer authentication (postgres)";
+            d->connected = true;
+            return true;
+        }
+        d->db.close();
+    }
+    else {
+        qDebug() << "❌ Peer auth (postgres) failed:" << d->db.lastError().text();
+    }
+    QSqlDatabase::removeDatabase("fridge_connection_postgres");
+
+    // Метод 3: Localhost подключение
+    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_local");
+    d->db.setConnectOptions("connect_timeout=3");
     d->db.setHostName("localhost");
     d->db.setPort(5432);
     d->db.setDatabaseName("fridgemanager");
     d->db.setUserName("postgres");
     d->db.setPassword("");
 
-    qDebug() << "🔄 Attempting PostgreSQL connection...";
-    qDebug() << "   Host:" << d->db.hostName();
-    qDebug() << "   Port:" << d->db.port();
-    qDebug() << "   Database:" << d->db.databaseName();
-    qDebug() << "   Username:" << d->db.userName();
+    qDebug() << "🔄 Attempting localhost connection...";
 
     if (d->db.open()) {
-        qDebug() << "✅ Database opened successfully";
-
         if (verifyConnection()) {
-            qDebug() << "🎉 Database connection established and verified";
+            qDebug() << "✅ Connected via localhost";
             d->connected = true;
             return true;
         }
-        else {
-            qWarning() << "❌ Connection verification failed";
-            d->db.close();
-        }
+        d->db.close();
     }
     else {
-        qWarning() << "❌ Failed to open database:" << d->db.lastError().text();
+        qDebug() << "❌ Localhost connection failed:" << d->db.lastError().text();
     }
-
-    // Если первый способ не сработал, пробуем peer authentication
-    QSqlDatabase::removeDatabase("fridge_connection");
-
-    d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_peer");
-    d->db.setConnectOptions("connect_timeout=5");
-    d->db.setHostName("");  // пустой для peer auth
-    d->db.setPort(-1);      // -1 для default порта
-    d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("postgres");
-    d->db.setPassword("");
-
-    qDebug() << "🔄 Attempting peer authentication...";
-
-    if (d->db.open()) {
-        qDebug() << "✅ Database opened via peer auth";
-
-        if (verifyConnection()) {
-            qDebug() << "🎉 Peer authentication connection established";
-            d->connected = true;
-            return true;
-        }
-        else {
-            d->db.close();
-        }
-    }
+    QSqlDatabase::removeDatabase("fridge_connection_local");
 
     qWarning() << "❌ All PostgreSQL connection attempts failed";
     d->lastError = "Could not establish database connection";
     d->connected = false;
-    QSqlDatabase::removeDatabase("fridge_connection_peer");
     return false;
 }
 
 bool DatabaseManager::verifyConnection()
 {
     if (!d->db.isOpen()) {
-        qWarning() << "❌ Database is not open";
+        qDebug() << "❌ Database not open in verifyConnection";
         return false;
     }
 
-    // Простой тестовый запрос
+    // ⭐ ВАЖНО: Используем простой и надежный запрос
+    // Не используем сложные запросы которые могут вызвать ошибки
+
+    // Простая проверка версии PostgreSQL
     QSqlQuery testQuery(d->db);
     if (!testQuery.exec("SELECT 1")) {
         qWarning() << "❌ Simple test query failed:" << testQuery.lastError().text();
@@ -113,47 +137,26 @@ bool DatabaseManager::verifyConnection()
     }
 
     if (testQuery.next()) {
-        qDebug() << "✅ Basic query execution: OK";
+        qDebug() << "✅ Basic connection test passed";
     }
     else {
         qWarning() << "❌ No results from test query";
         return false;
     }
 
-    // Проверяем версию PostgreSQL
-    QSqlQuery versionQuery(d->db);
-    if (versionQuery.exec("SELECT version()") && versionQuery.next()) {
-        QString version = versionQuery.value(0).toString();
-        qDebug() << "✅ PostgreSQL version:" << version.split(',')[0];
-    }
-    else {
-        qWarning() << "⚠️ Cannot get PostgreSQL version:" << versionQuery.lastError().text();
+    // Проверяем существование таблицы products (простой запрос)
+    QSqlQuery tableQuery(d->db);
+    if (!tableQuery.exec("SELECT COUNT(*) FROM products")) {
+        qDebug() << "⚠️ Products table check failed (might not exist):" << tableQuery.lastError().text();
+
+        // Если таблицы нет, это не критично - приложение создаст локальные данные
+        qDebug() << "📋 Will use local data mode";
+        return true; // Все равно возвращаем true, так как подключение работает
     }
 
-    // Проверяем существование таблицы products
-    QSqlQuery tableCheck(d->db);
-    if (tableCheck.exec("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')")) {
-        if (tableCheck.next()) {
-            bool tableExists = tableCheck.value(0).toBool();
-            if (tableExists) {
-                qDebug() << "✅ Products table exists";
-
-                // Проверяем количество продуктов
-                QSqlQuery countQuery(d->db);
-                if (countQuery.exec("SELECT COUNT(*) FROM products") && countQuery.next()) {
-                    qDebug() << "   Products count:" << countQuery.value(0).toInt();
-                }
-                return true;
-            }
-            else {
-                qWarning() << "❌ Products table does not exist";
-                return false;
-            }
-        }
-    }
-    else {
-        qWarning() << "❌ Cannot check products table:" << tableCheck.lastError().text();
-        return false;
+    if (tableQuery.next()) {
+        int productCount = tableQuery.value(0).toInt();
+        qDebug() << "✅ Products table exists, count:" << productCount;
     }
 
     return true;

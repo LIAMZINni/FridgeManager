@@ -17,55 +17,14 @@ systemctl start postgresql || true
 systemctl enable postgresql || true
 
 echo "⏳ Ожидаем запуск PostgreSQL..."
-sleep 5
+sleep 3
 
-# 🔧 ВАЖНО: Настраиваем peer authentication для текущего пользователя
-echo "🔧 Настраиваем Peer Authentication..."
-PG_HBA_FILE=$(find /etc/postgresql -name "pg_hba.conf" | head -1)
-
-if [ -f "$PG_HBA_FILE" ]; then
-    echo "📁 Найден файл: $PG_HBA_FILE"
-    
-    # Делаем резервную копию
-    sudo cp "$PG_HBA_FILE" "${PG_HBA_FILE}.backup"
-    echo "✅ Создана резервная копия"
-    
-    # Восстанавливаем стандартные настройки с peer auth
-    cat << 'EOF' | sudo tee "$PG_HBA_FILE" > /dev/null
-# PostgreSQL Client Authentication Configuration File
-# ===================================================
-# TYPE  DATABASE        USER            ADDRESS                 METHOD
-local   all             postgres                                peer
-local   all             all                                     peer
-host    all             all             127.0.0.1/32            md5
-host    all             all             ::1/128                 md5
-local   replication     all                                     peer
-host    replication     all             127.0.0.1/32            md5
-host    replication     all             ::1/128                 md5
-EOF
-
-    echo "✅ Peer authentication настроена"
-    
-    # Перезапускаем PostgreSQL
-    sudo systemctl restart postgresql
-    sleep 3
-    echo "✅ PostgreSQL перезапущен"
-else
-    echo "❌ Файл pg_hba.conf не найден!"
-    exit 1
-fi
-
-# 🔑 СОЗДАЕМ ПОЛЬЗОВАТЕЛЯ С ИМЕНЕМ ТЕКУЩЕГО СИСТЕМНОГО ПОЛЬЗОВАТЕЛЯ
 CURRENT_USER=$(whoami)
-echo "🔑 Создаем пользователя БД: $CURRENT_USER"
-sudo -u postgres psql -c "CREATE USER $CURRENT_USER WITH SUPERUSER;" 2>/dev/null && echo "✅ Пользователь создан: $CURRENT_USER" || echo "⚠️ Пользователь уже существует"
+echo "👤 Текущий пользователь системы: $CURRENT_USER"
 
-# Создаем базу данных
+# 🔧 ПРОСТАЯ НАСТРОЙКА: Создаем базу и таблицы от имени postgres
 echo "🗄️ Создаем базу данных..."
 sudo -u postgres createdb fridgemanager 2>/dev/null && echo "✅ База данных создана" || echo "📁 База данных уже существует"
-
-# Даем права текущему пользователю
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fridgemanager TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на БД выданы" || echo "⚠️ Права уже выданы"
 
 echo "📊 Создаем таблицу продуктов..."
 sudo -u postgres psql -d fridgemanager -c "
@@ -75,10 +34,6 @@ CREATE TABLE IF NOT EXISTS products (
     current_quantity INTEGER NOT NULL DEFAULT 0,
     norm_quantity INTEGER NOT NULL
 );" 2>/dev/null && echo "✅ Таблица создана" || echo "📋 Таблица уже существует"
-
-# Даем права на таблицу
-sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на таблицы выданы" || echo "⚠️ Права уже выданы"
-sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на последовательности выданы" || echo "⚠️ Права уже выданы"
 
 echo "📝 Добавляем тестовые данные..."
 sudo -u postgres psql -d fridgemanager -c "
@@ -90,29 +45,30 @@ INSERT INTO products (name, current_quantity, norm_quantity) VALUES
 ('Оливки', 3, 8)
 ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "✅ Данные добавлены" || echo "📊 Данные уже существуют"
 
+# 🔧 ПРОСТАЯ ПРОВЕРКА: используем существующие настройки
 echo "🔍 Проверяем подключения..."
 
-# Проверяем peer authentication (без указания пользователя)
-if psql -d fridgemanager -c "SELECT current_user, COUNT(*) FROM products;" &>/dev/null; then
+# Проверяем от имени postgres (самый надежный способ)
+if sudo -u postgres psql -d fridgemanager -c "SELECT COUNT(*) FROM products;" &>/dev/null; then
+    COUNT=$(sudo -u postgres psql -d fridgemanager -t -c "SELECT COUNT(*) FROM products;" | tr -d ' ')
+    echo "✅ Подключение postgres: РАБОТАЕТ"
+    echo "📊 Продуктов в базе: $COUNT"
+else
+    echo "❌ Подключение postgres: НЕ РАБОТАЕТ"
+fi
+
+# Проверяем peer authentication для текущего пользователя
+if psql -d fridgemanager -c "SELECT 1;" &>/dev/null; then
     echo "✅ Peer authentication: РАБОТАЕТ"
-    PRODUCT_COUNT=$(psql -d fridgemanager -t -c "SELECT COUNT(*) FROM products;" | tr -d ' ')
-    echo "📊 Продуктов в базе: $PRODUCT_COUNT"
-    echo "👤 Текущий пользователь: $CURRENT_USER"
 else
     echo "❌ Peer authentication: НЕ РАБОТАЕТ"
-    echo "Пробуем с пользователем postgres..."
-    if sudo -u postgres psql -d fridgemanager -c "SELECT current_user;" &>/dev/null; then
-        echo "✅ Peer auth (postgres): РАБОТАЕТ"
-    else
-        echo "❌ Peer auth (postgres): НЕ РАБОТАЕТ"
-    fi
 fi
 
 echo ""
 echo "🎉 Установка завершена!"
-echo "🔐 Peer authentication активирована"
-echo "   Пользователь: $CURRENT_USER (системный)"
-echo "   Пароль: НЕ ТРЕБУЕТСЯ"
-echo "   База данных: fridgemanager"
+echo "💡 Приложение попробует несколько методов подключения:"
+echo "   1. Peer authentication (текущий пользователь)"
+echo "   2. Peer authentication (postgres)"  
+echo "   3. Localhost подключение"
 echo "➡️ Запустите: fridgemanager"
 echo "=========================================="
