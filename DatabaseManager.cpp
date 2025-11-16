@@ -30,22 +30,22 @@ bool DatabaseManager::connectToDatabase()
 {
     disconnectFromDatabase();
 
-    qDebug() << "🔌 Connecting to PostgreSQL...";
+    qDebug() << "🔌 Connecting to PostgreSQL (Trust Authentication)...";
 
-    // Используем нового пользователя fridgeuser
+    // Trust authentication - БЕЗ ПАРОЛЯ
     d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection");
     d->db.setConnectOptions("connect_timeout=5");
     d->db.setHostName("localhost");
     d->db.setPort(5432);
     d->db.setDatabaseName("fridgemanager");
     d->db.setUserName("fridgeuser");
-    d->db.setPassword("fridge123");  // ⭐ Новый пароль
+    d->db.setPassword("");  // ⭐ ПУСТОЙ пароль для trust auth
 
     qDebug() << "   Host: localhost";
     qDebug() << "   Port: 5432";
     qDebug() << "   Database: fridgemanager";
     qDebug() << "   Username: fridgeuser";
-    qDebug() << "   Password: ***";
+    qDebug() << "   Password: (empty - trust auth)";
 
     if (d->db.open()) {
         // Проверяем подключение
