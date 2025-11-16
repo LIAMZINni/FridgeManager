@@ -4,6 +4,7 @@
 #include <QSqlError>
 #include <QDebug>
 #include <QString>
+#include <QCoreApplication>  // ⭐ ДОБАВЬТЕ ЭТОТ INCLUDE
 
 class DatabaseManager::Impl
 {
@@ -119,6 +120,7 @@ bool DatabaseManager::connectToDatabase()
     return false;
 }
 
+// ⭐ ВАЖНО: РЕАЛИЗАЦИЯ ФУНКЦИИ ДОЛЖНА БЫТЬ ПОСЛЕ connectToDatabase()
 bool DatabaseManager::verifyConnection()
 {
     if (!d->db.isOpen()) {
@@ -165,15 +167,11 @@ bool DatabaseManager::verifyConnection()
 void DatabaseManager::disconnectFromDatabase()
 {
     if (d->db.isValid() && d->db.isOpen()) {
-        QString connectionName = d->db.connectionName();
         d->db.close();
-        qDebug() << "🔌 Database connection closed:" << connectionName;
-
-        // Даем время на закрытие соединения перед удалением
-        QCoreApplication::processEvents();
-        QSqlDatabase::removeDatabase(connectionName);
+        qDebug() << "🔌 Database connection closed";
     }
     d->connected = false;
+    // ⭐ УБЕРИТЕ ЭТУ СТРОКУ: QCoreApplication::processEvents();
 }
 
 bool DatabaseManager::isConnected() const
