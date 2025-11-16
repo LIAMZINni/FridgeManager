@@ -30,28 +30,29 @@ bool DatabaseManager::connectToDatabase()
 {
     disconnectFromDatabase();
 
-    qDebug() << "🔌 Connecting to PostgreSQL (Trust Authentication)...";
+    qDebug() << "🔌 Connecting to PostgreSQL (Peer Authentication)...";
 
-    // Trust authentication - БЕЗ ПАРОЛЯ
+    // Peer authentication - пустые параметры для использования системного пользователя
     d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection");
     d->db.setConnectOptions("connect_timeout=5");
-    d->db.setHostName("localhost");
-    d->db.setPort(5432);
+    d->db.setHostName("");        // ⭐ ПУСТОЙ для peer auth
+    d->db.setPort(-1);            // ⭐ -1 для default порта
     d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("fridgeuser");
-    d->db.setPassword("");  // ⭐ ПУСТОЙ пароль для trust auth
+    d->db.setUserName("");        // ⭐ ПУСТОЙ для системного пользователя
+    d->db.setPassword("");        // ⭐ ПУСТОЙ пароль
 
-    qDebug() << "   Host: localhost";
-    qDebug() << "   Port: 5432";
+    qDebug() << "   Host: (empty - peer auth)";
+    qDebug() << "   Port: (default)";
     qDebug() << "   Database: fridgemanager";
-    qDebug() << "   Username: fridgeuser";
-    qDebug() << "   Password: (empty - trust auth)";
+    qDebug() << "   Username: (current system user)";
+    qDebug() << "   Password: (empty - peer auth)";
 
     if (d->db.open()) {
         // Проверяем подключение
-        QSqlQuery testQuery("SELECT version()", d->db);
+        QSqlQuery testQuery("SELECT version(), current_user", d->db);
         if (testQuery.exec() && testQuery.next()) {
             qDebug() << "✅ PostgreSQL:" << testQuery.value(0).toString().split(',')[0];
+            qDebug() << "✅ Connected as user:" << testQuery.value(1).toString();
 
             // Проверяем таблицу products
             QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
