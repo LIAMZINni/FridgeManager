@@ -232,7 +232,7 @@ private:
         }
     }
 
-    // ИЗМЕНИТЕ: переименуйте initializeProducts в initializeLocalProducts
+    
     void initializeLocalProducts() {
         m_products.clear();
 
@@ -258,29 +258,36 @@ private:
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
+
+            // ⭐ ВАЖНО: Правильная настройка кодировки для Linux
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
             stream.setCodec("UTF-8");
 #else
             stream.setEncoding(QStringConverter::Utf8);
 #endif
 
-            stream << "ЗАЯВКА ДЛЯ ПОСТАВЩИКА\n";
-            stream << "=====================\n";
+            // ⭐ ВАЖНО: Устанавливаем BOM для правильного отображения в Linux
+            stream.setGenerateByteOrderMark(true);
+
+            // Используем простой текст без сложных символов
+            stream << "=========================================\n";
+            stream << "           ЗАЯВКА ДЛЯ ПОСТАВЩИКА\n";
+            stream << "=========================================\n";
             stream << "Ресторан: 'Гурман'\n";
             stream << "Дата: " << QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm") << "\n";
-            stream << "Статус БД: " << m_databaseStatus << "\n";  // ДОБАВЬТЕ статус БД
-            stream << "=====================\n\n";
+            stream << "Статус БД: " << m_databaseStatus << "\n";
+            stream << "=========================================\n\n";
 
             bool hasOrders = false;
             int totalPacks = 0;
 
             stream << "ПРОДУКТЫ ДЛЯ ЗАКАЗА:\n";
-            stream << "-------------------\n";
+            stream << "-----------------------------------------\n";
 
             for (Product* product : m_products) {
                 if (product->needsOrder()) {
                     int orderQty = product->orderQuantity();
-                    stream << "• " << product->name() << ": " << orderQty << " упаковок\n";
+                    stream << "- " << product->name() << ": " << orderQty << " упаковок\n";
                     hasOrders = true;
                     totalPacks += orderQty;
                 }
@@ -290,31 +297,47 @@ private:
                 stream << "Все продукты в достаточном количестве.\n";
             }
             else {
-                stream << "\n-------------------\n";
-                stream << "ИТОГО: " << totalPacks << " упаковок\n";
+                stream << "\n-----------------------------------------\n";
+                stream << "ВСЕГО ДЛЯ ЗАКАЗА: " << totalPacks << " упаковок\n";
             }
 
-            stream << "\n=====================\n";
-            stream << "ТЕКУЩИЕ ОСТАТКИ:\n";
-            stream << "-------------------\n";
+            // Текущие остатки
+            stream << "\n=========================================\n";
+            stream << "           ТЕКУЩИЕ ОСТАТКИ\n";
+            stream << "=========================================\n";
 
             for (Product* product : m_products) {
-                stream << "• " << product->name() << ": " << product->currentQuantity()
+                stream << "- " << product->name() << ": " << product->currentQuantity()
                     << " / " << product->normQuantity() << " упаковок";
                 if (product->needsOrder()) {
-                    stream << " (нужно " << product->orderQuantity() << ")";
+                    stream << " (НУЖНО " << product->orderQuantity() << ")";
                 }
                 stream << "\n";
             }
 
             file.close();
 
-            qDebug() << "Order saved to:" << filePath;
-            return "Успех: Заявка сохранена в " + filePath;
+            // ⭐ ВАЖНО: Проверяем что файл создался и читается
+            if (QFile::exists(filePath)) {
+                qDebug() << "✅ Файл сохранен:" << filePath;
+
+                // Проверяем размер файла
+                QFileInfo savedFile(filePath);
+                if (savedFile.size() > 0) {
+                    return "Успех: Заявка сохранена в " + filePath;
+                }
+                else {
+                    return "Ошибка: Файл создан, но пустой";
+                }
+            }
+            else {
+                return "Ошибка: Файл не был создан";
+            }
         }
         else {
-            qDebug() << "Failed to save order file:" << filePath;
-            return "Ошибка: Не удалось сохранить файл " + filePath;
+            QString error = "Ошибка: Не удалось создать файл " + filePath;
+            qDebug() << error;
+            return error;
         }
     }
 

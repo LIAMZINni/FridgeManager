@@ -6,6 +6,22 @@ echo "   Настройка FridgeManager"
 echo "=========================================="
 
 chmod 755 /usr/bin/fridgemanager
+# 🔧 ВАЖНО: Настраиваем локаль для правильной кодировки
+echo "🔧 Настраиваем локаль и кодировку..."
+export LANG="ru_RU.UTF-8"
+export LC_ALL="ru_RU.UTF-8"
+
+# Устанавливаем русскую локаль если нет
+if ! locale -a | grep -q "ru_RU.utf8"; then
+    echo "📝 Устанавливаем русскую локаль..."
+    sudo locale-gen ru_RU.UTF-8
+    sudo update-locale LANG=ru_RU.UTF-8
+fi
+
+if ! command -v psql &> /dev/null; then
+    echo "❌ PostgreSQL не установлен!"
+    exit 1
+fi
 
 if ! command -v psql &> /dev/null; then
     echo "❌ PostgreSQL не установлен!"
@@ -21,6 +37,9 @@ sleep 3
 
 CURRENT_USER=$(whoami)
 echo "👤 Текущий пользователь системы: $CURRENT_USER"
+# 🔑 ВАЖНО: Создаем пользователя ubuntu для peer authentication
+echo "🔑 Создаем пользователя PostgreSQL: ubuntu"
+sudo -u postgres createuser --superuser ubuntu 2>/dev/null && echo "✅ Пользователь ubuntu создан" || echo "⚠️ Пользователь ubuntu уже существует"
 
 # 🔧 ПРОСТАЯ НАСТРОЙКА: Создаем базу и таблицы от имени postgres
 echo "🗄️ Создаем базу данных..."

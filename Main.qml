@@ -510,47 +510,7 @@ ApplicationWindow {
                 }
             }
 
-            // Статистика
-            Rectangle {
-                Layout.fillWidth: true
-                height: 40
-                color: "#e3f2fd"
-                radius: 5
-                border.color: "#bbdefb"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-
-                    Label {
-                        text: "📊 Статистика:"
-                        font.bold: true
-                        color: "#1565c0"
-                    }
-
-                    Label {
-                        text: {
-                            var totalProducts = fridgeManager.products.count;
-                            var needOrder = 0;
-                            for (var i = 0; i < totalProducts; i++) {
-                                if (fridgeManager.products.get(i).needsOrder) needOrder++;
-                            }
-                            return "Продуктов: " + totalProducts + " | Нужен заказ: " + needOrder;
-                        }
-                        color: "#1976d2"
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    Label {
-                        text: "🕐 " + Qt.formatDateTime(new Date(), "dd.MM.yyyy HH:mm")
-                        color: "#5d4037"
-                        font.pixelSize: 12
-                    }
-                }
-            }
-        }
-    }
+            
 
     Component.onCompleted: {
         console.log("✅ FridgeManager loaded successfully!");
