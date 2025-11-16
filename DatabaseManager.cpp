@@ -31,15 +31,13 @@ bool DatabaseManager::connectToDatabase()
 
     qDebug() << "🔌 Starting PostgreSQL connection attempts...";
 
-    // 🔄 Пробуем разные методы подключения в порядке приоритета
-
     // 1. Peer authentication с пользователем postgres
     d->db = QSqlDatabase::addDatabase("QPSQL", "fridge_connection_peer");
     d->db.setConnectOptions("connect_timeout=5");
     d->db.setHostName("");  // пустой для peer auth
     d->db.setPort(-1);      // -1 для default порта
     d->db.setDatabaseName("fridgemanager");
-    d->db.setUserName("postgres");  // ⭐ Явно указываем пользователя
+    d->db.setUserName("postgres");  // Явно указываем пользователя
     d->db.setPassword("");
 
     qDebug() << "🔄 Attempting peer authentication as user 'postgres'...";
@@ -104,7 +102,9 @@ bool DatabaseManager::connectToDatabase()
 
 bool DatabaseManager::verifyConnection()
 {
-    if (!d->db.isOpen()) return false;
+    if (!d->db.isOpen()) {
+        return false;
+    }
 
     // Проверяем версию PostgreSQL
     QSqlQuery versionQuery("SELECT version()", d->db);
@@ -137,12 +137,6 @@ bool DatabaseManager::verifyConnection()
         qWarning() << "❌ Cannot check products table:" << tableCheck.lastError().text();
         return false;
     }
-}
-
-    qWarning() << "❌ All connection attempts failed";
-    d->lastError = "Could not connect to PostgreSQL using any method";
-    d->connected = false;
-    return false;
 }
 
 void DatabaseManager::disconnectFromDatabase()

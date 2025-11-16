@@ -39,6 +39,8 @@ public:
     QString getLastError() const;
 
 private:
+    bool verifyConnection();
+
     class Impl;
     Impl* d;
 };
