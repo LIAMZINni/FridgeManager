@@ -1,4 +1,4 @@
-#ifndef DATABASEMANAGER_H
+п»ї#ifndef DATABASEMANAGER_H
 #define DATABASEMANAGER_H
 
 #include <QObject>
@@ -24,21 +24,20 @@ public:
     explicit DatabaseManager(QObject* parent = nullptr);
     ~DatabaseManager();
 
-    // Подключение к базе данных
     bool connectToDatabase();
     void disconnectFromDatabase();
     bool isConnected() const;
 
-    // Операции с продуктами
     QVector<ProductData> getAllProducts();
     bool updateProductQuantity(int productId, int newQuantity);
     bool addProductQuantity(int productId, int amount);
     bool removeProductQuantity(int productId, int amount);
 
-    // Информация об ошибках
     QString getLastError() const;
 
 private:
+    // в­ђ Р”РћР‘РђР’Р¬РўР• Р­РўРћ РћР‘РЄРЇР’Р›Р•РќРР•
+    void safeDisconnect(const QString& connectionName);
     bool verifyConnection();
 
     class Impl;

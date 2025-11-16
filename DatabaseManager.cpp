@@ -4,6 +4,7 @@
 #include <QSqlError>
 #include <QDebug>
 #include <QString>
+#include <QThread>  // ⭐ ДОБАВЬТЕ ЭТОТ INCLUDE
 
 class DatabaseManager::Impl
 {
@@ -23,6 +24,53 @@ DatabaseManager::~DatabaseManager()
 {
     disconnectFromDatabase();
     delete d;
+}
+
+// ⭐ РЕАЛИЗАЦИЯ safeDisconnect
+void DatabaseManager::safeDisconnect(const QString& connectionName)
+{
+    if (d->db.isValid() && d->db.isOpen()) {
+        d->db.close();
+    }
+    // Даем время для закрытия соединения
+    QThread::msleep(100);
+    QSqlDatabase::removeDatabase(connectionName);
+}
+
+bool DatabaseManager::verifyConnection()
+{
+    if (!d->db.isOpen()) {
+        qWarning() << "❌ Database not open for verification";
+        return false;
+    }
+
+    // Простая проверка - пытаемся выполнить простой запрос
+    QSqlQuery testQuery("SELECT 1", d->db);
+    if (testQuery.exec() && testQuery.next()) {
+        qDebug() << "✅ Basic connection test passed";
+
+        // Проверяем существование таблицы products
+        QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
+        if (tableCheck.exec() && tableCheck.next()) {
+            bool tableExists = tableCheck.value(0).toBool();
+            if (tableExists) {
+                qDebug() << "✅ Products table exists";
+                return true;
+            }
+            else {
+                qWarning() << "❌ Products table does not exist";
+                return false;
+            }
+        }
+        else {
+            qWarning() << "❌ Cannot check products table";
+            return false;
+        }
+    }
+    else {
+        qWarning() << "❌ Basic connection test failed";
+        return false;
+    }
 }
 
 bool DatabaseManager::connectToDatabase()
@@ -109,52 +157,6 @@ bool DatabaseManager::connectToDatabase()
     return false;
 }
 
-void DatabaseManager::safeDisconnect(const QString& connectionName)
-{
-    if (d->db.isValid() && d->db.isOpen()) {
-        d->db.close();
-    }
-    // Даем время для закрытия соединения
-    QThread::msleep(100);
-    QSqlDatabase::removeDatabase(connectionName);
-}
-
-bool DatabaseManager::verifyConnection()
-{
-    if (!d->db.isOpen()) {
-        qWarning() << "❌ Database not open for verification";
-        return false;
-    }
-
-    // Простая проверка - пытаемся выполнить простой запрос
-    QSqlQuery testQuery("SELECT 1", d->db);
-    if (testQuery.exec() && testQuery.next()) {
-        qDebug() << "✅ Basic connection test passed";
-
-        // Проверяем существование таблицы products
-        QSqlQuery tableCheck("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'products')", d->db);
-        if (tableCheck.exec() && tableCheck.next()) {
-            bool tableExists = tableCheck.value(0).toBool();
-            if (tableExists) {
-                qDebug() << "✅ Products table exists";
-                return true;
-            }
-            else {
-                qWarning() << "❌ Products table does not exist";
-                return false;
-            }
-        }
-        else {
-            qWarning() << "❌ Cannot check products table";
-            return false;
-        }
-    }
-    else {
-        qWarning() << "❌ Basic connection test failed";
-        return false;
-    }
-}
-
 void DatabaseManager::disconnectFromDatabase()
 {
     if (d->db.isValid() && d->db.isOpen()) {
@@ -170,7 +172,6 @@ bool DatabaseManager::isConnected() const
     return d->connected && d->db.isValid() && d->db.isOpen();
 }
 
-// Остальные методы остаются без изменений...
 QVector<ProductData> DatabaseManager::getAllProducts()
 {
     QVector<ProductData> products;
