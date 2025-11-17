@@ -6,6 +6,7 @@ echo "   Настройка FridgeManager"
 echo "=========================================="
 
 chmod 755 /usr/bin/fridgemanager
+
 # 🔧 ВАЖНО: Настраиваем локаль для правильной кодировки
 echo "🔧 Настраиваем локаль и кодировку..."
 export LANG="ru_RU.UTF-8"
@@ -23,11 +24,6 @@ if ! command -v psql &> /dev/null; then
     exit 1
 fi
 
-if ! command -v psql &> /dev/null; then
-    echo "❌ PostgreSQL не установлен!"
-    exit 1
-fi
-
 echo "🔧 Запускаем PostgreSQL..."
 systemctl start postgresql || true
 systemctl enable postgresql || true
@@ -35,11 +31,13 @@ systemctl enable postgresql || true
 echo "⏳ Ожидаем запуск PostgreSQL..."
 sleep 3
 
+# 🔑 ВАЖНО: Определяем ТЕКУЩЕГО пользователя системы
 CURRENT_USER=$(whoami)
 echo "👤 Текущий пользователь системы: $CURRENT_USER"
-# 🔑 ВАЖНО: Создаем пользователя ubuntu для peer authentication
-echo "🔑 Создаем пользователя PostgreSQL: ubuntu"
-sudo -u postgres createuser --superuser ubuntu 2>/dev/null && echo "✅ Пользователь ubuntu создан" || echo "⚠️ Пользователь ubuntu уже существует"
+
+# 🔑 СОЗДАЕМ ПОЛЬЗОВАТЕЛЯ PostgreSQL С ИМЕНЕМ ТЕКУЩЕГО СИСТЕМНОГО ПОЛЬЗОВАТЕЛЯ
+echo "🔑 Создаем пользователя PostgreSQL: $CURRENT_USER"
+sudo -u postgres createuser --superuser "$CURRENT_USER" 2>/dev/null && echo "✅ Пользователь $CURRENT_USER создан" || echo "⚠️ Пользователь $CURRENT_USER уже существует"
 
 # 🔧 ПРОСТАЯ НАСТРОЙКА: Создаем базу и таблицы от имени postgres
 echo "🗄️ Создаем базу данных..."
@@ -54,8 +52,12 @@ CREATE TABLE IF NOT EXISTS products (
     norm_quantity INTEGER NOT NULL
 );" 2>/dev/null && echo "✅ Таблица создана" || echo "📋 Таблица уже существует"
 
-# Даем права пользователю ubuntu
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fridgemanager TO ubuntu;" 2>/dev/null && echo "✅ Права выданы пользователю ubuntu" || echo "⚠️ Права уже выданы"
+# Даем права ТЕКУЩЕМУ пользователю
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fridgemanager TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права выданы пользователю $CURRENT_USER" || echo "⚠️ Права уже выданы"
+
+# Даем права на таблицы
+sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на таблицы выданы" || echo "⚠️ Права на таблицы уже выданы"
+sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на последовательности выданы" || echo "⚠️ Права на последовательности уже выданы"
 
 echo "📝 Добавляем тестовые данные..."
 sudo -u postgres psql -d fridgemanager -c "
@@ -79,18 +81,24 @@ else
     echo "❌ Подключение postgres: НЕ РАБОТАЕТ"
 fi
 
-# Проверяем peer authentication для текущего пользователя
-if psql -d fridgemanager -c "SELECT 1;" &>/dev/null; then
-    echo "✅ Peer authentication: РАБОТАЕТ"
+# Проверяем peer authentication для ТЕКУЩЕГО пользователя
+if psql -d fridgemanager -c "SELECT current_user;" &>/dev/null; then
+    USER=$(psql -d fridgemanager -t -c "SELECT current_user;" | tr -d ' ')
+    echo "✅ Peer authentication: РАБОТАЕТ (пользователь: $USER)"
 else
-    echo "❌ Peer authentication: НЕ РАБОТАЕТ"
+    echo "❌ Peer authentication: НЕ РАБОТАЕТ для $CURRENT_USER"
+    
+    # Проверяем с пользователем postgres
+    if sudo -u postgres psql -d fridgemanager -c "SELECT current_user;" &>/dev/null; then
+        echo "✅ Peer auth (postgres): РАБОТАЕТ"
+    else
+        echo "❌ Peer auth (postgres): НЕ РАБОТАЕТ"
+    fi
 fi
 
 echo ""
 echo "🎉 Установка завершена!"
-echo "💡 Приложение попробует несколько методов подключения:"
-echo "   1. Peer authentication (текущий пользователь)"
-echo "   2. Peer authentication (postgres)"  
-echo "   3. Localhost подключение"
+echo "👤 Создан пользователь PostgreSQL: $CURRENT_USER"
+echo "💡 Приложение попробует подключиться как: $CURRENT_USER"
 echo "➡️ Запустите: fridgemanager"
 echo "=========================================="

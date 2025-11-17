@@ -66,7 +66,7 @@ public:
         , m_databaseStatus("Подключение к БД...")
         , m_lastSavePath("")
     {
-        // ИЗМЕНИТЕ: используем инициализацию через БД
+        
         initializeDatabase();
     }
 
@@ -82,7 +82,7 @@ public:
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
 
-            // ИЗМЕНИТЕ: обновляем в БД если подключены
+            
             if (m_databaseConnected) {
                 if (m_dbManager.addProductQuantity(product->id(), amount)) {
                     product->setCurrentQuantity(product->currentQuantity() + amount);
@@ -99,7 +99,7 @@ public:
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
             if (product->currentQuantity() >= amount) {
-                // ИЗМЕНИТЕ: обновляем в БД если подключены
+                
                 if (m_databaseConnected) {
                     if (m_dbManager.removeProductQuantity(product->id(), amount)) {
                         product->setCurrentQuantity(product->currentQuantity() - amount);
@@ -113,7 +113,7 @@ public:
         }
     }
 
-    // Остальные методы без изменений...
+    
     Q_INVOKABLE QString generateOrder() {
         QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
         QString defaultFileName = defaultPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
@@ -250,7 +250,7 @@ private:
         QDir dir = fileInfo.dir();
         if (!dir.exists()) {
             if (!dir.mkpath(".")) {
-                return "Ошибка: Не удалось создать директорию " + dir.absolutePath();
+                return "Error: Cannot create directory " + dir.absolutePath();
             }
         }
 
@@ -258,86 +258,66 @@ private:
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
+            stream.setCodec("UTF-8"); 
 
-            // ⭐ ВАЖНО: Правильная настройка кодировки для Linux
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-            stream.setCodec("UTF-8");
-#else
-            stream.setEncoding(QStringConverter::Utf8);
-#endif
-
-            // ⭐ ВАЖНО: Устанавливаем BOM для правильного отображения в Linux
-            stream.setGenerateByteOrderMark(true);
-
-            // Используем простой текст без сложных символов
+            
             stream << "=========================================\n";
-            stream << "           ЗАЯВКА ДЛЯ ПОСТАВЩИКА\n";
+            stream << "           SUPPLIER ORDER\n";
             stream << "=========================================\n";
-            stream << "Ресторан: 'Гурман'\n";
-            stream << "Дата: " << QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm") << "\n";
-            stream << "Статус БД: " << m_databaseStatus << "\n";
+            stream << "Restaurant: 'Gourmet'\n";
+            stream << "Date: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm") << "\n";
+            stream << "DB Status: " << (m_databaseConnected ? "Connected" : "Local mode") << "\n";
             stream << "=========================================\n\n";
 
             bool hasOrders = false;
             int totalPacks = 0;
 
-            stream << "ПРОДУКТЫ ДЛЯ ЗАКАЗА:\n";
+            stream << "PRODUCTS TO ORDER:\n";
             stream << "-----------------------------------------\n";
 
             for (Product* product : m_products) {
                 if (product->needsOrder()) {
                     int orderQty = product->orderQuantity();
-                    stream << "- " << product->name() << ": " << orderQty << " упаковок\n";
+                    stream << "- " << product->name() << ": " << orderQty << " packs\n";
                     hasOrders = true;
                     totalPacks += orderQty;
                 }
             }
 
             if (!hasOrders) {
-                stream << "Все продукты в достаточном количестве.\n";
+                stream << "All products are in sufficient quantity.\n";
             }
             else {
                 stream << "\n-----------------------------------------\n";
-                stream << "ВСЕГО ДЛЯ ЗАКАЗА: " << totalPacks << " упаковок\n";
+                stream << "TOTAL TO ORDER: " << totalPacks << " packs\n";
             }
 
-            // Текущие остатки
+            // Current stock
             stream << "\n=========================================\n";
-            stream << "           ТЕКУЩИЕ ОСТАТКИ\n";
+            stream << "           CURRENT STOCK\n";
             stream << "=========================================\n";
 
             for (Product* product : m_products) {
                 stream << "- " << product->name() << ": " << product->currentQuantity()
-                    << " / " << product->normQuantity() << " упаковок";
+                    << " / " << product->normQuantity() << " packs";
                 if (product->needsOrder()) {
-                    stream << " (НУЖНО " << product->orderQuantity() << ")";
+                    stream << " (NEED " << product->orderQuantity() << ")";
                 }
                 stream << "\n";
             }
 
             file.close();
 
-            // ⭐ ВАЖНО: Проверяем что файл создался и читается
-            if (QFile::exists(filePath)) {
-                qDebug() << "✅ Файл сохранен:" << filePath;
-
-                // Проверяем размер файла
-                QFileInfo savedFile(filePath);
-                if (savedFile.size() > 0) {
-                    return "Успех: Заявка сохранена в " + filePath;
-                }
-                else {
-                    return "Ошибка: Файл создан, но пустой";
-                }
+            if (QFile::exists(filePath) && QFileInfo(filePath).size() > 0) {
+                qDebug() << "File saved:" << filePath;
+                return "Success: Order saved to " + filePath;
             }
             else {
-                return "Ошибка: Файл не был создан";
+                return "Error: File created but empty";
             }
         }
         else {
-            QString error = "Ошибка: Не удалось создать файл " + filePath;
-            qDebug() << error;
-            return error;
+            return "Error: Cannot create file " + filePath;
         }
     }
 
@@ -349,7 +329,7 @@ private:
     QString m_lastSavePath;
 };
 
-// Остальная часть файла без изменений...
+
 bool loadQml(QQmlApplicationEngine& engine) {
     QStringList possiblePaths;
 
