@@ -1,4 +1,4 @@
-﻿#include <QGuiApplication>
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QDebug>
@@ -7,19 +7,21 @@
 #include <QDateTime>
 #include <QStandardPaths>
 #include <QDir>
-
+#include <QLocale>
+#include <QTextCodec>
 
 #include "DatabaseManager.h"
+#include "ProtobufSerializer.h"
 
 class Product : public QObject
 {
     Q_OBJECT
-        Q_PROPERTY(int id READ id CONSTANT)
-        Q_PROPERTY(QString name READ name CONSTANT)
-        Q_PROPERTY(int currentQuantity READ currentQuantity WRITE setCurrentQuantity NOTIFY currentQuantityChanged)
-        Q_PROPERTY(int normQuantity READ normQuantity CONSTANT)
-        Q_PROPERTY(bool needsOrder READ needsOrder NOTIFY currentQuantityChanged)
-        Q_PROPERTY(int orderQuantity READ orderQuantity NOTIFY currentQuantityChanged)
+    Q_PROPERTY(int id READ id CONSTANT)
+    Q_PROPERTY(QString name READ name CONSTANT)
+    Q_PROPERTY(int currentQuantity READ currentQuantity WRITE setCurrentQuantity NOTIFY currentQuantityChanged)
+    Q_PROPERTY(int normQuantity READ normQuantity CONSTANT)
+    Q_PROPERTY(bool needsOrder READ needsOrder NOTIFY currentQuantityChanged)
+    Q_PROPERTY(int orderQuantity READ orderQuantity NOTIFY currentQuantityChanged)
 
 public:
     Product(QObject* parent = nullptr) : QObject(parent) {}
@@ -41,6 +43,11 @@ public:
         }
     }
 
+    // Конвертация в ProductData для protobuf
+    ProductData toProductData() const {
+        return ProductData(m_id, m_name, m_currentQuantity, m_normQuantity);
+    }
+
 signals:
     void currentQuantityChanged();
 
@@ -54,10 +61,10 @@ private:
 class FridgeManager : public QObject
 {
     Q_OBJECT
-        Q_PROPERTY(QQmlListProperty<Product> products READ products NOTIFY productsChanged)
-        Q_PROPERTY(bool databaseConnected READ databaseConnected NOTIFY databaseStatusChanged)
-        Q_PROPERTY(QString databaseStatus READ databaseStatus NOTIFY databaseStatusChanged)
-        Q_PROPERTY(QString lastSavePath READ lastSavePath NOTIFY lastSavePathChanged)
+    Q_PROPERTY(QQmlListProperty<Product> products READ products NOTIFY productsChanged)
+    Q_PROPERTY(bool databaseConnected READ databaseConnected NOTIFY databaseStatusChanged)
+    Q_PROPERTY(QString databaseStatus READ databaseStatus NOTIFY databaseStatusChanged)
+    Q_PROPERTY(QString lastSavePath READ lastSavePath NOTIFY lastSavePathChanged)
 
 public:
     explicit FridgeManager(QObject* parent = nullptr)
@@ -65,8 +72,8 @@ public:
         , m_databaseConnected(false)
         , m_databaseStatus("Подключение к БД...")
         , m_lastSavePath("")
+        , m_protobufSerializer(new ProtobufSerializer(this))
     {
-        
         initializeDatabase();
     }
 
@@ -81,8 +88,6 @@ public:
     Q_INVOKABLE void addProductQuantity(int index, int amount) {
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
-
-            
             if (m_databaseConnected) {
                 if (m_dbManager.addProductQuantity(product->id(), amount)) {
                     product->setCurrentQuantity(product->currentQuantity() + amount);
@@ -99,7 +104,6 @@ public:
         if (index >= 0 && index < m_products.size()) {
             Product* product = m_products[index];
             if (product->currentQuantity() >= amount) {
-                
                 if (m_databaseConnected) {
                     if (m_dbManager.removeProductQuantity(product->id(), amount)) {
                         product->setCurrentQuantity(product->currentQuantity() - amount);
@@ -113,30 +117,123 @@ public:
         }
     }
 
-    
+    // Основные методы сохранения
     Q_INVOKABLE QString generateOrder() {
         QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
-        QString defaultFileName = defaultPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
+        QString baseName = defaultPath + "/order_supplier_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
 
-        QString result = saveOrderToFile(defaultFileName);
-        if (result.startsWith("Успех:")) {
-            m_lastSavePath = defaultFileName;
+        // Сохраняем в оба формата
+        QString txtResult = saveOrderToFile(baseName + ".txt");
+        QString protoResult = saveOrderToProtobuf(baseName + ".bin");
+
+        if (txtResult.startsWith("Success:")) {
+            m_lastSavePath = baseName + ".txt";
             emit lastSavePathChanged();
         }
-        return result;
+
+        return txtResult + "\n" + protoResult;
     }
 
     Q_INVOKABLE QString saveOrderToPath(const QString& directoryPath) {
-        QString fileName = directoryPath + "/заявка_поставщику_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".txt";
+        QString baseName = directoryPath + "/order_supplier_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
 
-        QString result = saveOrderToFile(fileName);
-        if (result.startsWith("Успех:")) {
-            m_lastSavePath = fileName;
+        QString txtResult = saveOrderToFile(baseName + ".txt");
+        QString protoResult = saveOrderToProtobuf(baseName + ".bin");
+
+        if (txtResult.startsWith("Success:")) {
+            m_lastSavePath = baseName + ".txt";
             emit lastSavePathChanged();
         }
+
+        return txtResult + "\n" + protoResult;
+    }
+
+    // НОВЫЕ МЕТОДЫ ДЛЯ PROTOBUF
+    Q_INVOKABLE QString exportToProtobuf(const QString& directoryPath) {
+        QString filePath = directoryPath + "/products_backup_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".bin";
+        
+        QVector<ProductData> productsData;
+        for (Product* product : m_products) {
+            productsData.append(product->toProductData());
+        }
+
+        if (m_protobufSerializer->exportProducts(productsData, filePath)) {
+            return "Success: Products exported to " + filePath;
+        } else {
+            return "Error: " + m_protobufSerializer->getLastError();
+        }
+    }
+
+    Q_INVOKABLE QString importFromProtobuf(const QString& filePath) {
+        QVector<ProductData> productsData = m_protobufSerializer->importProducts(filePath);
+        
+        if (productsData.isEmpty()) {
+            return "Error: " + m_protobufSerializer->getLastError();
+        }
+
+        // Обновляем список продуктов
+        m_products.clear();
+        for (const auto& productData : productsData) {
+            m_products.append(new Product(
+                productData.id,
+                productData.name,
+                productData.currentQuantity,
+                productData.normQuantity,
+                this
+            ));
+        }
+
+        emit productsChanged();
+        return "Success: Loaded " + QString::number(productsData.size()) + " products from " + filePath;
+    }
+
+    Q_INVOKABLE QString saveOrderProtobufOnly(const QString& directoryPath) {
+        QString filePath = directoryPath + "/order_protobuf_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + ".bin";
+        
+        QVector<ProductData> productsToOrder;
+        for (Product* product : m_products) {
+            if (product->needsOrder()) {
+                productsToOrder.append(product->toProductData());
+            }
+        }
+
+        if (m_protobufSerializer->exportOrder(productsToOrder, filePath, "Gourmet")) {
+            return "Success: Order saved in protobuf: " + filePath;
+        } else {
+            return "Error: " + m_protobufSerializer->getLastError();
+        }
+    }
+
+    Q_INVOKABLE QString loadOrderFromProtobuf(const QString& filePath) {
+        QVector<ProductData> productsData = m_protobufSerializer->importProducts(filePath);
+        
+        if (productsData.isEmpty()) {
+            return "Error: " + m_protobufSerializer->getLastError();
+        }
+
+        QString result = "📊 Order loaded from Protobuf:\n\n";
+        result += "File: " + filePath + "\n";
+        result += "Products count: " + QString::number(productsData.size()) + "\n\n";
+        
+        int totalOrder = 0;
+        for (const auto& product : productsData) {
+            int orderQty = qMax(0, product.normQuantity - product.currentQuantity);
+            if (orderQty > 0) {
+                result += "• " + product.name + ": " + QString::number(orderQty) + " packs\n";
+                totalOrder += orderQty;
+            }
+        }
+        
+        if (totalOrder > 0) {
+            result += "\nTotal to order: " + QString::number(totalOrder) + " packs";
+        } else {
+            result += "\nNo products to order";
+        }
+        
         return result;
     }
 
+    // Существующие методы без изменений
     Q_INVOKABLE QString getDefaultDocumentsPath() {
         return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     }
@@ -167,11 +264,11 @@ public:
 
     Q_INVOKABLE QStringList getAvailableDirectories() {
         QStringList dirs;
-        dirs << getDefaultHomePath() + "/Заявки";
+        dirs << getDefaultHomePath() + "/Orders";
         dirs << getDesktopPath();
         dirs << getDefaultDocumentsPath();
         dirs << getDefaultDownloadsPath();
-        dirs << QDir::currentPath() + "/заявки";
+        dirs << QDir::currentPath() + "/orders";
 
         QStringList availableDirs;
         for (const QString& dir : dirs) {
@@ -189,36 +286,32 @@ signals:
     void lastSavePathChanged();
 
 private:
-    // ДОБАВЬТЕ: метод инициализации БД
     void initializeDatabase() {
         qDebug() << "🔄 Initializing database connection...";
 
         if (m_dbManager.connectToDatabase() && m_dbManager.isConnected()) {
             m_databaseConnected = true;
-            m_databaseStatus = "✅ База данных PostgreSQL подключена";
+            m_databaseStatus = "✅ PostgreSQL database connected";
 
-            // Загружаем продукты из БД
             auto productsData = m_dbManager.getAllProducts();
             if (!productsData.isEmpty()) {
                 loadProductsFromDatabase(productsData);
-                qDebug() << "✅ Загружено продуктов из БД:" << productsData.size();
+                qDebug() << "✅ Loaded products from DB:" << productsData.size();
             }
             else {
-                m_databaseStatus = "❌ БД подключена, но продукты не найдены";
+                m_databaseStatus = "❌ DB connected but no products found";
                 initializeLocalProducts();
             }
         }
         else {
-            // Если БД недоступна - локальный режим
             m_databaseConnected = false;
-            m_databaseStatus = "📋 Локальный режим (БД недоступна)";
-            qDebug() << "❌ PostgreSQL недоступна:" << m_dbManager.getLastError();
+            m_databaseStatus = "📋 Local mode (DB unavailable)";
+            qDebug() << "❌ PostgreSQL unavailable:" << m_dbManager.getLastError();
             initializeLocalProducts();
         }
         emit databaseStatusChanged();
     }
 
-    // ДОБАВЬТЕ: метод загрузки из БД
     void loadProductsFromDatabase(const QVector<ProductData>& productsData) {
         m_products.clear();
         for (const auto& productData : productsData) {
@@ -232,17 +325,14 @@ private:
         }
     }
 
-    
     void initializeLocalProducts() {
         m_products.clear();
-
-        m_products.append(new Product(1, "Творог", 5, 10, this));
-        m_products.append(new Product(2, "Сыр", 12, 15, this));
-        m_products.append(new Product(3, "Молоко", 18, 20, this));
-        m_products.append(new Product(4, "Яйца", 25, 30, this));
-        m_products.append(new Product(5, "Оливки", 3, 8, this));
-
-        qDebug() << "📋 Используются локальные тестовые данные";
+        m_products.append(new Product(1, "Cottage cheese", 5, 10, this));
+        m_products.append(new Product(2, "Cheese", 12, 15, this));
+        m_products.append(new Product(3, "Milk", 18, 20, this));
+        m_products.append(new Product(4, "Eggs", 25, 30, this));
+        m_products.append(new Product(5, "Olives", 3, 8, this));
+        qDebug() << "📋 Using local test data";
     }
 
     QString saveOrderToFile(const QString& filePath) {
@@ -258,15 +348,21 @@ private:
 
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream.setCodec("UTF-8"); 
-
             
+            // Устанавливаем UTF-8 кодировку
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+            stream.setCodec("UTF-8");
+#else
+            stream.setEncoding(QStringConverter::Utf8);
+#endif
+            stream.setGenerateByteOrderMark(false);
+
             stream << "=========================================\n";
             stream << "           SUPPLIER ORDER\n";
             stream << "=========================================\n";
             stream << "Restaurant: 'Gourmet'\n";
             stream << "Date: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm") << "\n";
-            stream << "DB Status: " << (m_databaseConnected ? "Connected" : "Local mode") << "\n";
+            stream << "DB Status: " << m_databaseStatus << "\n";
             stream << "=========================================\n\n";
 
             bool hasOrders = false;
@@ -321,14 +417,28 @@ private:
         }
     }
 
+    QString saveOrderToProtobuf(const QString& filePath) {
+        QVector<ProductData> productsToOrder;
+        for (Product* product : m_products) {
+            if (product->needsOrder()) {
+                productsToOrder.append(product->toProductData());
+            }
+        }
+
+        if (m_protobufSerializer->exportOrder(productsToOrder, filePath, "Gourmet")) {
+            return "Success: Protobuf order saved to " + filePath;
+        } else {
+            return "Error Protobuf: " + m_protobufSerializer->getLastError();
+        }
+    }
+
     QList<Product*> m_products;
-    
     DatabaseManager m_dbManager;
+    ProtobufSerializer* m_protobufSerializer;
     bool m_databaseConnected;
     QString m_databaseStatus;
     QString m_lastSavePath;
 };
-
 
 bool loadQml(QQmlApplicationEngine& engine) {
     QStringList possiblePaths;
@@ -366,9 +476,19 @@ bool loadQml(QQmlApplicationEngine& engine) {
 
 int main(int argc, char* argv[])
 {
+    // Устанавливаем локаль и кодировку для Linux
+    setlocale(LC_ALL, "C.UTF-8");
+    qputenv("LC_ALL", "C.UTF-8");
+    qputenv("LANG", "C.UTF-8");
+    
     qDebug() << "Starting FridgeManager application...";
 
     QGuiApplication app(argc, argv);
+
+    // Устанавливаем кодировку по умолчанию
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
+#endif
 
     app.setApplicationName("FridgeManager");
     app.setApplicationVersion("1.0.0");
