@@ -10,22 +10,48 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-# Ищем Qt5 компоненты
+# Ищем зависимости
 find_package(Qt5 COMPONENTS Core Quick Qml Sql REQUIRED)
-
-# Ищем PostgreSQL
 find_package(PostgreSQL REQUIRED)
 
-find_package(Protobuf REQUIRED)
+# Ручной поиск Protobuf
+find_path(PROTOBUF_INCLUDE_DIR
+    NAMES google/protobuf/message.h
+    PATHS /usr/include /usr/local/include
+)
 
-# Генерируем C++ код из .proto файлов
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDS product.proto)
+find_library(PROTOBUF_LIBRARY
+    NAMES protobuf
+    PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib
+)
 
-message(STATUS "Qt5 Core found: ${Qt5Core_FOUND}")
-message(STATUS "Qt5 Quick found: ${Qt5Quick_FOUND}")
-message(STATUS "Qt5 Qml found: ${Qt5Qml_FOUND}")
-message(STATUS "Qt5 Sql found: ${Qt5Sql_FOUND}")
-message(STATUS "PostgreSQL found: ${PostgreSQL_FOUND}")
+if(PROTOBUF_INCLUDE_DIR AND PROTOBUF_LIBRARY)
+    message(STATUS "Found Protobuf include: ${PROTOBUF_INCLUDE_DIR}")
+    message(STATUS "Found Protobuf library: ${PROTOBUF_LIBRARY}")
+    set(Protobuf_FOUND TRUE)
+    set(Protobuf_INCLUDE_DIRS ${PROTOBUF_INCLUDE_DIR})
+    set(Protobuf_LIBRARIES ${PROTOBUF_LIBRARY})
+else()
+    message(WARNING "Protobuf not found, building without Protobuf support")
+    set(Protobuf_FOUND FALSE)
+endif()
+
+# Генерируем protobuf файлы
+if(Protobuf_FOUND)
+    execute_process(
+        COMMAND protoc --cpp_out=${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/product.proto
+        RESULT_VARIABLE PROTO_RESULT
+    )
+    
+    if(PROTO_RESULT EQUAL 0)
+        message(STATUS "Successfully generated protobuf files")
+        set(PROTO_SRCS ${CMAKE_CURRENT_BINARY_DIR}/product.pb.cc)
+        set(PROTO_HDS ${CMAKE_CURRENT_BINARY_DIR}/product.pb.h)
+    else()
+        message(WARNING "Failed to generate protobuf files")
+        set(Protobuf_FOUND FALSE)
+    endif()
+endif()
 
 # Создаем исполняемый файл
 add_executable(FridgeManager
@@ -34,11 +60,12 @@ add_executable(FridgeManager
     DatabaseManager.h
     ProtobufSerializer.cpp
     ProtobufSerializer.h
-    ${PROTO_SRCS} ${PROTO_HDS}
 )
 
-# Настройки для QML
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DQT_QML_DEBUG")
+# Добавляем protobuf файлы если они есть
+if(Protobuf_FOUND)
+    target_sources(FridgeManager PRIVATE ${PROTO_SRCS})
+endif()
 
 # Подключаем библиотеки
 target_link_libraries(FridgeManager
@@ -47,38 +74,25 @@ target_link_libraries(FridgeManager
     Qt5::Qml
     Qt5::Sql
     ${PostgreSQL_LIBRARIES}
-    ${Protobuf_LIBRARIES}
 )
+
+# Добавляем protobuf библиотеки если есть
+if(Protobuf_FOUND)
+    target_link_libraries(FridgeManager ${Protobuf_LIBRARIES})
+    target_include_directories(FridgeManager PRIVATE ${Protobuf_INCLUDE_DIRS})
+endif()
 
 # Подключаем заголовочные файлы
-target_include_directories(FridgeManager PRIVATE ${PostgreSQL_INCLUDE_DIRS}
-${Protobuf_INCLUDE_DIRS}
-${CMAKE_CURRENT_BINARY_DIR}
+target_include_directories(FridgeManager PRIVATE 
+    ${PostgreSQL_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-# Устанавливаем путь к QML импортам
-target_compile_definitions(FridgeManager PRIVATE 
-    QT_QML_LIB
-    QT_QUICK_LIB
-)
-
-# Для Linux: устанавливаем пути к плагинам Qt
-if(UNIX AND NOT APPLE)
-    # Получаем путь к Qt5
-    get_target_property(QT_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
-    execute_process(
-        COMMAND ${QT_QMAKE_EXECUTABLE} -query QT_INSTALL_PLUGINS
-        OUTPUT_VARIABLE QT_INSTALL_PLUGINS
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    execute_process(
-        COMMAND ${QT_QMAKE_EXECUTABLE} -query QT_INSTALL_QML
-        OUTPUT_VARIABLE QT_INSTALL_QML
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    
-    # Устанавливаем переменные окружения для runtime
-    add_custom_command(TARGET FridgeManager POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Setting Qt environment variables..."
-    )
+# Добавляем определение для условной компиляции
+if(Protobuf_FOUND)
+    target_compile_definitions(FridgeManager PRIVATE USE_PROTOBUF)
 endif()
+
+message(STATUS "Qt5 found: YES")
+message(STATUS "PostgreSQL found: YES")
+message(STATUS "Protobuf support: ${Protobuf_FOUND}")
