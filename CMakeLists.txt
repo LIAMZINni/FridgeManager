@@ -47,12 +47,14 @@ target_link_libraries(FridgeManager
     Qt5::Qml
     Qt5::Sql
     ${PostgreSQL_LIBRARIES}
-    protobuf
+    ${Protobuf_LIBRARIES}
 )
 
 # Подключаем заголовочные файлы
 target_include_directories(FridgeManager PRIVATE ${PostgreSQL_INCLUDE_DIRS}
-${CMAKE_CURRENT_BINARY_DIR})
+${Protobuf_INCLUDE_DIRS}
+${CMAKE_CURRENT_BINARY_DIR}
+)
 
 # Устанавливаем путь к QML импортам
 target_compile_definitions(FridgeManager PRIVATE 
