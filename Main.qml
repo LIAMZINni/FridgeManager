@@ -6,12 +6,12 @@ import FridgeManager 1.0
 
 ApplicationWindow {
     id: mainWindow
-    width: 1000
-    height: 800
+    width: 900
+    height: 700
     visible: true
-    title: "Учет продуктов ресторана + Protobuf"
-    minimumWidth: 900
-    minimumHeight: 650
+    title: "Учет продуктов ресторана"
+    minimumWidth: 800
+    minimumHeight: 600
 
     // Диалог выбора директории
     Popup {
@@ -199,6 +199,7 @@ ApplicationWindow {
                                 newFolderName.text = "";
                                 createFolderDialog.close();
                                 resultDialog.open();
+                                // Обновляем список директорий
                                 directoryCombo.model = fridgeManager.getAvailableDirectories();
                             } else {
                                 dialogMessage.text = "❌ Не удалось создать папку: " + newPath;
@@ -220,7 +221,7 @@ ApplicationWindow {
     Popup {
         id: resultDialog
         width: 500
-        height: 300
+        height: 200
         modal: true
         focus: true
         anchors.centerIn: parent
@@ -281,7 +282,7 @@ ApplicationWindow {
 
             // Заголовок
             Label {
-                text: "📦 Учет продуктов холодильника + Protobuf"
+                text: "📦 Учет продуктов холодильника"
                 font.pixelSize: 28
                 font.bold: true
                 color: "#2c3e50"
@@ -428,7 +429,7 @@ ApplicationWindow {
             // Панель управления
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 20
+                spacing: 10
 
                 // Информация о путях
                 Column {
@@ -462,12 +463,12 @@ ApplicationWindow {
                     }
                 }
 
-                // Кнопки сохранения - ОСНОВНЫЕ
+                // Кнопки сохранения
                 Column {
                     spacing: 5
 
                     Button {
-                        text: "💾 Быстрое сохранение (TXT+Protobuf)"
+                        text: "💾 Быстрое сохранение"
                         onClicked: {
                             var result = fridgeManager.generateOrder();
                             dialogMessage.text = result;
@@ -477,7 +478,9 @@ ApplicationWindow {
 
                     Button {
                         text: "📁 Выбрать папку"
-                        onClicked: directoryDialog.open()
+                        onClicked: {
+                            directoryDialog.open();
+                        }
                     }
 
                     Button {
@@ -496,69 +499,19 @@ ApplicationWindow {
 
                     Button {
                         text: "📁 Создать папку"
-                        onClicked: createFolderDialog.open()
-                    }
-                }
-
-                // Кнопки Protobuf
-                Column {
-                    spacing: 5
-
-                    Button {
-                        text: "📦 Экспорт продуктов (Protobuf)"
                         onClicked: {
-                            if (directoryCombo.currentText) {
-                                var result = fridgeManager.exportToProtobuf(directoryCombo.currentText);
-                                dialogMessage.text = result;
-                                resultDialog.open();
-                            }
-                        }
-                    }
-
-                    Button {
-                        text: "📥 Импорт продуктов (Protobuf)"
-                        onClicked: {
-                            // Для примера - можно добавить диалог выбора файла
-                            var examplePath = fridgeManager.getDefaultHomePath() + "/products_backup_example.bin";
-                            var result = "Укажите путь к файлу в коде\nПример: " + examplePath + 
-                                        "\n\nИли используйте метод: fridgeManager.importFromProtobuf('/путь/к/файлу.bin')";
-                            dialogMessage.text = result;
-                            resultDialog.open();
-                        }
-                    }
-
-                    Button {
-                        text: "🚀 Только Protobuf заявка"
-                        onClicked: {
-                            if (directoryCombo.currentText) {
-                                var result = fridgeManager.saveOrderProtobufOnly(directoryCombo.currentText);
-                                dialogMessage.text = result;
-                                resultDialog.open();
-                            }
-                        }
-                    }
-
-                    Button {
-                        text: "📊 Загрузить Protobuf заявку"
-                        onClicked: {
-                            // Для примера
-                            var examplePath = fridgeManager.getDefaultHomePath() + "/order_protobuf_example.bin";
-                            var result = "Укажите путь к файлу в коде\nПример: " + examplePath + 
-                                        "\n\nИли используйте метод: fridgeManager.loadOrderFromProtobuf('/путь/к/файлу.bin')";
-                            dialogMessage.text = result;
-                            resultDialog.open();
+                            createFolderDialog.open();
                         }
                     }
                 }
             }
-
-            
         }
     }
 
     Component.onCompleted: {
-        console.log("✅ FridgeManager with Protobuf loaded successfully!");
+        console.log("✅ FridgeManager loaded successfully!");
         console.log("Home path:", fridgeManager.getDefaultHomePath());
+        console.log("Documents path:", fridgeManager.getDefaultDocumentsPath());
         console.log("Available directories:", fridgeManager.getAvailableDirectories());
         
         // Автоматически выбираем первую доступную директорию
