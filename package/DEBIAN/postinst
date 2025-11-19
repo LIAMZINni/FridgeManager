@@ -5,106 +5,134 @@ echo "=========================================="
 echo "   Полная установка FridgeManager"
 echo "=========================================="
 
-# 🔧 Функция для проверки и установки пакетов
+# ?? Функция для проверки и установки пакетов
 install_package() {
     local package=$1
     local description=$2
     
-    echo "📦 Проверяем $description..."
+    echo "?? Проверяем $description..."
     if dpkg -l | grep -q "^ii  $package "; then
-        echo "✅ $description уже установлен"
+        echo "? $description уже установлен"
         return 0
     else
-        echo "⬇️ Устанавливаем $description..."
-        if sudo apt install -y "$package" 2>/dev/null; then
-            echo "✅ $description установлен"
+        echo "?? Устанавливаем $description..."
+        if sudo apt install -y "$package"; then
+            echo "? $description установлен"
             return 0
         else
-            echo "⚠️ Не удалось установить $package, пробуем альтернативы..."
+            echo "? Не удалось установить $package"
             return 1
         fi
     fi
 }
 
-# 🔧 Функция для установки пакета с альтернативами
-install_package_with_alternatives() {
-    local main_package=$1
-    local description=$2
-    shift 2
-    local alternatives=("$@")
+# ?? ОСОБАЯ функция для установки qml-module-qtquick-layouts
+install_qtquick_layouts() {
+    echo ""
+    echo "?? КРИТИЧЕСКИ ВАЖНО: Устанавливаем qml-module-qtquick-layouts"
+    echo "?? Пробуем разные способы установки..."
     
-    if install_package "$main_package" "$description"; then
+    # Способ 1: Прямая установка
+    echo "?? Способ 1: Прямая установка..."
+    if sudo apt install -y qml-module-qtquick-layouts; then
+        echo "? qml-module-qtquick-layouts установлен"
+        return 0
+    fi
+    
+    # Способ 2: Обновляем кэш и пробуем снова
+    echo "?? Способ 2: Обновляем кэш пакетов..."
+    sudo apt update
+    if sudo apt install -y qml-module-qtquick-layouts; then
+        echo "? qml-module-qtquick-layouts установлен"
+        return 0
+    fi
+    
+    # Способ 3: Ищем пакет в репозиториях
+    echo "?? Способ 3: Ищем пакет в репозиториях..."
+    apt-cache search qtquick-layouts | head -5
+    
+    # Способ 4: Пробуем установить все qml модули
+    echo "?? Способ 4: Устанавливаем все доступные QML модули..."
+    sudo apt install -y qml-module-qtquick* 2>/dev/null || true
+    
+    # Способ 5: Пробуем установить из другого источника
+    echo "?? Способ 5: Проверяем universe repository..."
+    sudo apt install -y software-properties-common
+    sudo add-apt-repository universe -y 2>/dev/null || true
+    sudo apt update
+    if sudo apt install -y qml-module-qtquick-layouts; then
+        echo "? qml-module-qtquick-layouts установлен"
+        return 0
+    fi
+    
+    # Способ 6: Для Ubuntu 22.04+ может быть другой пакет
+    echo "?? Способ 6: Пробуем альтернативные названия..."
+    sudo apt install -y qtquickcontrols2-5-dev 2>/dev/null || true
+    sudo apt install -y libqt5quicklayouts5 2>/dev/null || true
+    sudo apt install -y qt5-qmltooling-layouts 2>/dev/null || true
+    
+    # Проверяем установился ли хоть какой-то пакет
+    if dpkg -l | grep -q "qtquick.*layout"; then
+        echo "? Похожий пакет найден"
         return 0
     else
-        for alt_package in "${alternatives[@]}"; do
-            echo "🔄 Пробуем альтернативу: $alt_package"
-            if install_package "$alt_package" "$description (альтернатива)"; then
-                return 0
-            fi
-        done
-        echo "❌ Не удалось установить $description"
+        echo "? ВСЕ способы не сработали, но продолжаем установку..."
         return 1
     fi
 }
 
-# 🔧 Функция для проверки команд
+# ?? Функция для проверки команд
 check_command() {
     local cmd=$1
     local description=$2
     
     if command -v "$cmd" &> /dev/null; then
-        echo "✅ $description найден"
+        echo "? $description найден"
         return 0
     else
-        echo "❌ $description не найден"
+        echo "? $description не найден"
         return 1
     fi
 }
 
-# 🔧 Обновляем пакеты
-echo "🔄 Обновляем список пакетов..."
+# ?? Обновляем пакеты
+echo "?? Обновляем список пакетов..."
 sudo apt update
 
-# 📦 Устанавливаем системные зависимости
+# ?? Устанавливаем системные зависимости
 echo ""
-echo "📥 Устанавливаем системные зависимости..."
+echo "?? Устанавливаем системные зависимости..."
 
 install_package "build-essential" "инструменты сборки"
 install_package "cmake" "CMake"
 install_package "pkg-config" "pkg-config"
 
-# 📦 Устанавливаем Qt5 зависимости
+# ?? Устанавливаем Qt5 зависимости
 echo ""
-echo "📥 Устанавливаем Qt5 зависимости..."
+echo "?? Устанавливаем Qt5 зависимости..."
 
 install_package "qt5-default" "Qt5 базовые пакеты"
 install_package "qtdeclarative5-dev" "Qt5 QML разработка"
 
-# 📦 Устанавливаем ВСЕ необходимые QML модули с альтернативами
+# ?? Устанавливаем КРИТИЧЕСКИ ВАЖНЫЕ QML модули
 echo ""
-echo "📥 Устанавливаем QML модули..."
+echo "?? Устанавливаем КРИТИЧЕСКИ ВАЖНЫЕ QML модули..."
 
-# Основные QML модули
-install_package_with_alternatives "qml-module-qtquick2" "QtQuick2 модуль"
-install_package_with_alternatives "qml-module-qtquick-controls2" "QtQuick Controls2" "qtquickcontrols2-5-dev"
-install_package_with_alternatives "qml-module-qtquick-window2" "QtQuick Window2"
+# Сначала устанавливаем ВСЕ основные QML модули
+install_package "qml-module-qtquick2" "QtQuick2 модуль"
+install_package "qml-module-qtquick-controls2" "QtQuick Controls2"
+install_package "qml-module-qtquick-window2" "QtQuick Window2"
 
-# QtQuick Layouts - разные варианты для разных версий Ubuntu
-echo "📦 Устанавливаем QtQuick Layouts..."
-if ! install_package "qml-module-qtquick-layouts" "QtQuick Layouts"; then
-    echo "🔄 Пробуем альтернативные пакеты для QtQuick Layouts..."
-    install_package "qt5-qmltooling-layouts" "Qt5 QML Layouts" || \
-    install_package "libqt5qml5" "Qt5 QML (может содержать layouts)" || \
-    install_package "qtdeclarative5-dev" "Qt Declarative (уже установлен)" && \
-    echo "⚠️ QtQuick Layouts может быть в другом пакете"
-fi
+# Затем КРИТИЧЕСКИ ВАЖНЫЙ модуль layouts
+install_qtquick_layouts
 
-install_package_with_alternatives "qml-module-qtquick-templates2" "QtQuick Templates2"
-install_package_with_alternatives "qml-module-qtgraphicaleffects" "Qt Graphical Effects" "libqt5graphicaleffects5"
+# Дополнительные модули
+install_package "qml-module-qtquick-templates2" "QtQuick Templates2"
+install_package "qml-module-qtgraphicaleffects" "Qt Graphical Effects"
 
-# 📦 Устанавливаем дополнительные Qt библиотеки
+# ?? Устанавливаем дополнительные Qt библиотеки
 echo ""
-echo "📥 Устанавливаем дополнительные Qt библиотеки..."
+echo "?? Устанавливаем дополнительные Qt библиотеки..."
 
 install_package "libqt5sql5" "Qt5 SQL библиотека"
 install_package "libqt5sql5-psql" "Qt5 PostgreSQL драйвер"
@@ -115,35 +143,26 @@ install_package "libqt5quick5" "Qt5 Quick библиотека"
 install_package "libqt5quickcontrols2-5" "Qt5 Quick Controls2"
 install_package "libqt5widgets5" "Qt5 Widgets библиотека"
 install_package "libqt5network5" "Qt5 Network библиотека"
-install_package "libqt5concurrent5" "Qt5 Concurrent библиотека"
 
-# 📦 Устанавливаем PostgreSQL
+# ?? Устанавливаем PostgreSQL
 echo ""
-echo "📥 Устанавливаем PostgreSQL..."
+echo "?? Устанавливаем PostgreSQL..."
 
 install_package "postgresql" "PostgreSQL сервер"
 install_package "postgresql-contrib" "PostgreSQL дополнения"
 install_package "libpq-dev" "PostgreSQL разработка"
 install_package "libpq5" "PostgreSQL клиентская библиотека"
 
-# 📦 Устанавливаем Protocol Buffers
+# ?? Устанавливаем Protocol Buffers
 echo ""
-echo "📥 Устанавливаем Protocol Buffers..."
+echo "?? Устанавливаем Protocol Buffers..."
 
 install_package "protobuf-compiler" "Protobuf компилятор"
 install_package "libprotobuf-dev" "Protobuf библиотеки"
-install_package "libprotoc-dev" "Protobuf компилятор разработка"
 
-# 📦 Устанавливаем дополнительные системные библиотеки
+# ?? Проверяем установленные компоненты
 echo ""
-echo "📥 Устанавливаем системные библиотеки..."
-
-install_package "libgl1-mesa-dev" "OpenGL библиотеки"
-install_package "libglu1-mesa-dev" "GLU библиотеки"
-
-# 🔧 Проверяем установленные компоненты
-echo ""
-echo "🔍 Проверяем установленные компоненты..."
+echo "?? Проверяем установленные компоненты..."
 
 check_command "g++" "Компилятор C++"
 check_command "cmake" "CMake"
@@ -151,95 +170,79 @@ check_command "qmake" "Qt5 qmake"
 check_command "protoc" "Protobuf компилятор"
 check_command "psql" "PostgreSQL клиент"
 
-# Проверяем доступные QML модули
+# ?? Проверяем QML модули
 echo ""
-echo "🔍 Проверяем доступные QML модули..."
+echo "?? Проверяем наличие QML модулей..."
 
-# Создаем тестовый QML файл для проверки
-cat > /tmp/test_qml_modules.qml << 'EOF'
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Window 2.15
+# Проверяем основные модули
+QML_MODULES=(
+    "QtQuick"
+    "QtQuick.Controls" 
+    "QtQuick.Layouts"
+    "QtQuick.Window"
+)
 
-Window {
-    width: 400
-    height: 300
-    visible: true
-    title: "QML Modules Test"
+for module in "${QML_MODULES[@]}"; do
+    if [ -d "/usr/lib/x86_64-linux-gnu/qt5/qml/$(echo $module | cut -d'.' -f1)" ]; then
+        echo "? QML модуль $module доступен"
+    else
+        echo "? QML модуль $module НЕ доступен"
+    fi
+done
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 10
-
-        Button {
-            text: "Test Button"
-            Layout.alignment: Qt.AlignCenter
-        }
-
-        Label {
-            text: "QML modules are working!"
-            Layout.alignment: Qt.AlignCenter
-        }
-    }
-}
-EOF
-
-echo "✅ Тестовый QML файл создан"
-
-# 🔧 Настраиваем локаль для правильной кодировки
+# ?? Настраиваем локаль для правильной кодировки
 echo ""
-echo "🔧 Настраиваем локаль и кодировку..."
+echo "?? Настраиваем локаль и кодировку..."
 export LANG="ru_RU.UTF-8"
 export LC_ALL="ru_RU.UTF-8"
 
 # Устанавливаем русскую локаль если нет
 if ! locale -a | grep -q "ru_RU.utf8"; then
-    echo "📝 Устанавливаем русскую локаль..."
+    echo "?? Устанавливаем русскую локаль..."
     sudo locale-gen ru_RU.UTF-8
     sudo update-locale LANG=ru_RU.UTF-8
 fi
 
-# 🔧 Настраиваем PostgreSQL
+# ?? Настраиваем PostgreSQL
 echo ""
-echo "🔧 Настраиваем PostgreSQL..."
+echo "?? Настраиваем PostgreSQL..."
 
-echo "🔧 Запускаем PostgreSQL..."
+echo "?? Запускаем PostgreSQL..."
 sudo systemctl start postgresql || true
 sudo systemctl enable postgresql || true
 
-echo "⏳ Ожидаем запуск PostgreSQL..."
+echo "? Ожидаем запуск PostgreSQL..."
 sleep 3
 
-# 🔑 Определяем ТЕКУЩЕГО пользователя системы
+# ?? Определяем ТЕКУЩЕГО пользователя системы
 CURRENT_USER=$(whoami)
-echo "👤 Текущий пользователь системы: $CURRENT_USER"
+echo "?? Текущий пользователь системы: $CURRENT_USER"
 
-# 🔑 СОЗДАЕМ ПОЛЬЗОВАТЕЛЯ PostgreSQL С ИМЕНЕМ ТЕКУЩЕГО СИСТЕМНОГО ПОЛЬЗОВАТЕЛЯ
-echo "🔑 Создаем пользователя PostgreSQL: $CURRENT_USER"
-sudo -u postgres createuser --superuser "$CURRENT_USER" 2>/dev/null && echo "✅ Пользователь $CURRENT_USER создан" || echo "⚠️ Пользователь $CURRENT_USER уже существует"
+# ?? СОЗДАЕМ ПОЛЬЗОВАТЕЛЯ PostgreSQL С ИМЕНЕМ ТЕКУЩЕГО СИСТЕМНОГО ПОЛЬЗОВАТЕЛЯ
+echo "?? Создаем пользователя PostgreSQL: $CURRENT_USER"
+sudo -u postgres createuser --superuser "$CURRENT_USER" 2>/dev/null && echo "? Пользователь $CURRENT_USER создан" || echo "?? Пользователь $CURRENT_USER уже существует"
 
-# 🔧 Создаем базу и таблицы от имени postgres
-echo "🗄️ Создаем базу данных..."
-sudo -u postgres createdb fridgemanager 2>/dev/null && echo "✅ База данных создана" || echo "📁 База данных уже существует"
+# ?? Создаем базу и таблицы от имени postgres
+echo "??? Создаем базу данных..."
+sudo -u postgres createdb fridgemanager 2>/dev/null && echo "? База данных создана" || echo "?? База данных уже существует"
 
-echo "📊 Создаем таблицу продуктов..."
+echo "?? Создаем таблицу продуктов..."
 sudo -u postgres psql -d fridgemanager -c "
 CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) UNIQUE NOT NULL,
     current_quantity INTEGER NOT NULL DEFAULT 0,
     norm_quantity INTEGER NOT NULL
-);" 2>/dev/null && echo "✅ Таблица создана" || echo "📋 Таблица уже существует"
+);" 2>/dev/null && echo "? Таблица создана" || echo "?? Таблица уже существует"
 
 # Даем права ТЕКУЩЕМУ пользователю
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fridgemanager TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права выданы пользователю $CURRENT_USER" || echo "⚠️ Права уже выданы"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fridgemanager TO $CURRENT_USER;" 2>/dev/null && echo "? Права выданы пользователю $CURRENT_USER" || echo "?? Права уже выданы"
 
 # Даем права на таблицы
-sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на таблицы выданы" || echo "⚠️ Права на таблицы уже выданы"
-sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "✅ Права на последовательности выданы" || echo "⚠️ Права на последовательности уже выданы"
+sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "? Права на таблицы выданы" || echo "?? Права на таблицы уже выданы"
+sudo -u postgres psql -d fridgemanager -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $CURRENT_USER;" 2>/dev/null && echo "? Права на последовательности выданы" || echo "?? Права на последовательности уже выданы"
 
-echo "📝 Добавляем тестовые данные..."
+echo "?? Добавляем тестовые данные..."
 sudo -u postgres psql -d fridgemanager -c "
 INSERT INTO products (name, current_quantity, norm_quantity) VALUES
 ('Творог', 5, 10),
@@ -247,76 +250,59 @@ INSERT INTO products (name, current_quantity, norm_quantity) VALUES
 ('Молоко', 18, 20),
 ('Яйца', 25, 30),
 ('Оливки', 3, 8)
-ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "✅ Данные добавлены" || echo "📊 Данные уже существуют"
+ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "? Данные добавлены" || echo "?? Данные уже существуют"
 
-# 🔧 Проверяем подключения
+# ?? Проверяем подключения
 echo ""
-echo "🔍 Проверяем подключения..."
+echo "?? Проверяем подключения..."
 
 # Проверяем от имени postgres (самый надежный способ)
 if sudo -u postgres psql -d fridgemanager -c "SELECT COUNT(*) FROM products;" &>/dev/null; then
     COUNT=$(sudo -u postgres psql -d fridgemanager -t -c "SELECT COUNT(*) FROM products;" | tr -d ' ')
-    echo "✅ Подключение postgres: РАБОТАЕТ"
-    echo "📊 Продуктов в базе: $COUNT"
+    echo "? Подключение postgres: РАБОТАЕТ"
+    echo "?? Продуктов в базе: $COUNT"
 else
-    echo "❌ Подключение postgres: НЕ РАБОТАЕТ"
+    echo "? Подключение postgres: НЕ РАБОТАЕТ"
 fi
 
-# Проверяем peer authentication для ТЕКУЩЕГО пользователя
-if psql -d fridgemanager -c "SELECT current_user;" &>/dev/null; then
-    USER=$(psql -d fridgemanager -t -c "SELECT current_user;" | tr -d ' ')
-    echo "✅ Peer authentication: РАБОТАЕТ (пользователь: $USER)"
-else
-    echo "❌ Peer authentication: НЕ РАБОТАЕТ для $CURRENT_USER"
-    
-    # Проверяем с пользователем postgres
-    if sudo -u postgres psql -d fridgemanager -c "SELECT current_user;" &>/dev/null; then
-        echo "✅ Peer auth (postgres): РАБОТАЕТ"
-    else
-        echo "❌ Peer auth (postgres): НЕ РАБОТАЕТ"
-    fi
-fi
-
-# 🔧 Собираем приложение
+# ?? Собираем приложение
 echo ""
-echo "🔨 Собираем приложение..."
+echo "?? Собираем приложение..."
 
 if [ -d "build" ]; then
-    echo "📁 Очищаем предыдущую сборку..."
+    echo "?? Очищаем предыдущую сборку..."
     rm -rf build
 fi
 
 mkdir build
 cd build
 
-echo "⚙️ Конфигурируем с CMake..."
+echo "?? Конфигурируем с CMake..."
 if cmake ..; then
-    echo "✅ CMake конфигурация успешна"
+    echo "? CMake конфигурация успешна"
 else
-    echo "❌ Ошибка CMake конфигурации"
-    # Показываем детальную ошибку
-    cmake .. 2>&1 | tail -20
+    echo "? Ошибка CMake конфигурации"
     exit 1
 fi
 
-echo "🔨 Компилируем проект..."
+echo "?? Компилируем проект..."
 if make -j$(nproc); then
-    echo "✅ Сборка успешна"
+    echo "? Сборка успешна"
 else
-    echo "❌ Ошибка сборки"
+    echo "? Ошибка сборки"
     exit 1
 fi
 
-# 🔧 Устанавливаем приложение
+# ?? Устанавливаем приложение
 echo ""
-echo "📥 Устанавливаем приложение в систему..."
+echo "?? Устанавливаем приложение в систему..."
 
 # Копируем исполняемый файл
 sudo cp FridgeManager /usr/bin/fridgemanager
 sudo chmod 755 /usr/bin/fridgemanager
 
 # Создаем desktop файл
-echo "🎯 Создаем ярлык приложения..."
+echo "?? Создаем ярлык приложения..."
 sudo tee /usr/share/applications/fridgemanager.desktop > /dev/null << EOF
 [Desktop Entry]
 Version=1.0
@@ -330,7 +316,7 @@ Terminal=false
 EOF
 
 # Создаем ярлык на рабочем столе
-echo "🖥️ Создаем ярлык на рабочем столе..."
+echo "??? Создаем ярлык на рабочем столе..."
 cat > ~/Desktop/FridgeManager.desktop << EOF
 [Desktop Entry]
 Version=1.0
@@ -345,19 +331,19 @@ EOF
 chmod +x ~/Desktop/FridgeManager.desktop
 
 echo ""
-echo "🎉 Установка завершена!"
-echo "👤 Создан пользователь PostgreSQL: $CURRENT_USER"
-echo "💡 Приложение подключится как: $CURRENT_USER"
-echo "📁 Исполняемый файл: /usr/bin/fridgemanager"
-echo "🖥️  Ярлык: Меню приложений → FridgeManager"
-echo "🖥️  Ярлык: Рабочий стол → FridgeManager"
-echo "➡️  Запустите: fridgemanager"
+echo "?? Установка завершена!"
+echo "?? Создан пользователь PostgreSQL: $CURRENT_USER"
+echo "?? Приложение подключится как: $CURRENT_USER"
+echo "?? Исполняемый файл: /usr/bin/fridgemanager"
+echo "???  Ярлык: Меню приложений > FridgeManager"
+echo "???  Ярлык: Рабочий стол > FridgeManager"
+echo "??  Запустите: fridgemanager"
 echo "   или найдите в меню приложений"
 echo "=========================================="
 
-# 🔧 Запускаем приложение (опционально)
+# ?? Запускаем приложение (опционально)
 echo ""
-read -p "🚀 Запустить FridgeManager сейчас? (y/n): " -n 1 -r
+read -p "?? Запустить FridgeManager сейчас? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Запускаем FridgeManager..."
