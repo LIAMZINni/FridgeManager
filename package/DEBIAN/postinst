@@ -1,13 +1,88 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 echo "=========================================="
-echo "   Настройка FridgeManager"
+echo "   Полная установка FridgeManager"
 echo "=========================================="
 
-chmod 755 /usr/bin/fridgemanager
+# 🔧 Функция для проверки и установки пакетов
+install_package() {
+    local package=$1
+    local description=$2
+    
+    echo "📦 Проверяем $description..."
+    if dpkg -l | grep -q "^ii  $package "; then
+        echo "✅ $description уже установлен"
+    else
+        echo "⬇️ Устанавливаем $description..."
+        sudo apt install -y "$package"
+    fi
+}
 
-# 🔧 ВАЖНО: Настраиваем локаль для правильной кодировки
+# 🔧 Функция для проверки команд
+check_command() {
+    local cmd=$1
+    local description=$2
+    
+    if command -v "$cmd" &> /dev/null; then
+        echo "✅ $description найден"
+        return 0
+    else
+        echo "❌ $description не найден"
+        return 1
+    fi
+}
+
+# 🔧 Обновляем пакеты
+echo "🔄 Обновляем список пакетов..."
+sudo apt update
+
+# 📦 Устанавливаем системные зависимости
+echo ""
+echo "📥 Устанавливаем системные зависимости..."
+
+install_package "build-essential" "инструменты сборки"
+install_package "cmake" "CMake"
+install_package "pkg-config" "pkg-config"
+
+# 📦 Устанавливаем Qt5 зависимости
+echo ""
+echo "📥 Устанавливаем Qt5 зависимости..."
+
+install_package "qt5-default" "Qt5 базовые пакеты"
+install_package "qtdeclarative5-dev" "Qt5 QML разработка"
+install_package "qml-module-qtquick2" "QtQuick2 модуль"
+install_package "qml-module-qtquick-controls2" "QtQuick Controls2"
+install_package "qml-module-qtquick-layouts" "QtQuick Layouts"
+install_package "qml-module-qtquick-window2" "QtQuick Window2"
+
+# 📦 Устанавливаем PostgreSQL
+echo ""
+echo "📥 Устанавливаем PostgreSQL..."
+
+install_package "postgresql" "PostgreSQL сервер"
+install_package "postgresql-contrib" "PostgreSQL дополнения"
+install_package "libpq-dev" "PostgreSQL разработка"
+
+# 📦 Устанавливаем Protocol Buffers
+echo ""
+echo "📥 Устанавливаем Protocol Buffers..."
+
+install_package "protobuf-compiler" "Protobuf компилятор"
+install_package "libprotobuf-dev" "Protobuf библиотеки"
+
+# 🔧 Проверяем установленные компоненты
+echo ""
+echo "🔍 Проверяем установленные компоненты..."
+
+check_command "g++" "Компилятор C++"
+check_command "cmake" "CMake"
+check_command "qmake" "Qt5 qmake"
+check_command "protoc" "Protobuf компилятор"
+check_command "psql" "PostgreSQL клиент"
+
+# 🔧 Настраиваем локаль для правильной кодировки
+echo ""
 echo "🔧 Настраиваем локаль и кодировку..."
 export LANG="ru_RU.UTF-8"
 export LC_ALL="ru_RU.UTF-8"
@@ -19,19 +94,18 @@ if ! locale -a | grep -q "ru_RU.utf8"; then
     sudo update-locale LANG=ru_RU.UTF-8
 fi
 
-if ! command -v psql &> /dev/null; then
-    echo "❌ PostgreSQL не установлен!"
-    exit 1
-fi
+# 🔧 Настраиваем PostgreSQL
+echo ""
+echo "🔧 Настраиваем PostgreSQL..."
 
 echo "🔧 Запускаем PostgreSQL..."
-systemctl start postgresql || true
-systemctl enable postgresql || true
+sudo systemctl start postgresql || true
+sudo systemctl enable postgresql || true
 
 echo "⏳ Ожидаем запуск PostgreSQL..."
 sleep 3
 
-# 🔑 ВАЖНО: Определяем ТЕКУЩЕГО пользователя системы
+# 🔑 Определяем ТЕКУЩЕГО пользователя системы
 CURRENT_USER=$(whoami)
 echo "👤 Текущий пользователь системы: $CURRENT_USER"
 
@@ -39,7 +113,7 @@ echo "👤 Текущий пользователь системы: $CURRENT_USER
 echo "🔑 Создаем пользователя PostgreSQL: $CURRENT_USER"
 sudo -u postgres createuser --superuser "$CURRENT_USER" 2>/dev/null && echo "✅ Пользователь $CURRENT_USER создан" || echo "⚠️ Пользователь $CURRENT_USER уже существует"
 
-# 🔧 ПРОСТАЯ НАСТРОЙКА: Создаем базу и таблицы от имени postgres
+# 🔧 Создаем базу и таблицы от имени postgres
 echo "🗄️ Создаем базу данных..."
 sudo -u postgres createdb fridgemanager 2>/dev/null && echo "✅ База данных создана" || echo "📁 База данных уже существует"
 
@@ -69,7 +143,8 @@ INSERT INTO products (name, current_quantity, norm_quantity) VALUES
 ('Оливки', 3, 8)
 ON CONFLICT (name) DO NOTHING;" 2>/dev/null && echo "✅ Данные добавлены" || echo "📊 Данные уже существуют"
 
-# 🔧 ПРОСТАЯ ПРОВЕРКА: используем существующие настройки
+# 🔧 Проверяем подключения
+echo ""
 echo "🔍 Проверяем подключения..."
 
 # Проверяем от имени postgres (самый надежный способ)
@@ -96,9 +171,62 @@ else
     fi
 fi
 
+# 🔧 Собираем приложение
+echo ""
+echo "🔨 Собираем приложение..."
+
+if [ -d "build" ]; then
+    echo "📁 Очищаем предыдущую сборку..."
+    rm -rf build
+fi
+
+mkdir build
+cd build
+
+echo "⚙️ Конфигурируем с CMake..."
+if cmake ..; then
+    echo "✅ CMake конфигурация успешна"
+else
+    echo "❌ Ошибка CMake конфигурации"
+    exit 1
+fi
+
+echo "🔨 Компилируем проект..."
+if make -j$(nproc); then
+    echo "✅ Сборка успешна"
+else
+    echo "❌ Ошибка сборки"
+    exit 1
+fi
+
+# 🔧 Устанавливаем приложение
+echo ""
+echo "📥 Устанавливаем приложение в систему..."
+
+# Копируем исполняемый файл
+sudo cp FridgeManager /usr/bin/fridgemanager
+sudo chmod 755 /usr/bin/fridgemanager
+
+# Создаем desktop файл
+echo "🎯 Создаем ярлык приложения..."
+sudo tee /usr/share/applications/fridgemanager.desktop > /dev/null << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FridgeManager
+Comment=Учет продуктов ресторана
+Exec=fridgemanager
+Icon=utilities-system-monitor
+Categories=Office;
+Terminal=false
+EOF
+
 echo ""
 echo "🎉 Установка завершена!"
 echo "👤 Создан пользователь PostgreSQL: $CURRENT_USER"
-echo "💡 Приложение попробует подключиться как: $CURRENT_USER"
-echo "➡️ Запустите: fridgemanager"
+echo "💡 Приложение подключится как: $CURRENT_USER"
+echo "📁 Исполняемый файл: /usr/bin/fridgemanager"
+echo "🖥️  Ярлык: Меню приложений → FridgeManager"
+echo "➡️  Запустите: fridgemanager"
+echo "   или найдите в меню приложений"
 echo "=========================================="
