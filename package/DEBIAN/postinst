@@ -51,10 +51,31 @@ echo "📥 Устанавливаем Qt5 зависимости..."
 
 install_package "qt5-default" "Qt5 базовые пакеты"
 install_package "qtdeclarative5-dev" "Qt5 QML разработка"
+
+# 📦 Устанавливаем ВСЕ необходимые QML модули
+echo ""
+echo "📥 Устанавливаем QML модули..."
+
 install_package "qml-module-qtquick2" "QtQuick2 модуль"
 install_package "qml-module-qtquick-controls2" "QtQuick Controls2"
 install_package "qml-module-qtquick-layouts" "QtQuick Layouts"
 install_package "qml-module-qtquick-window2" "QtQuick Window2"
+install_package "qml-module-qtquick-templates2" "QtQuick Templates2"
+install_package "qml-module-qtgraphicaleffects" "Qt Graphical Effects"
+
+# 📦 Устанавливаем дополнительные Qt библиотеки
+echo ""
+echo "📥 Устанавливаем дополнительные Qt библиотеки..."
+
+install_package "libqt5sql5" "Qt5 SQL библиотека"
+install_package "libqt5sql5-psql" "Qt5 PostgreSQL драйвер"
+install_package "libqt5core5a" "Qt5 Core библиотека"
+install_package "libqt5gui5" "Qt5 GUI библиотека"
+install_package "libqt5qml5" "Qt5 QML библиотека"
+install_package "libqt5quick5" "Qt5 Quick библиотека"
+install_package "libqt5quickcontrols2-5" "Qt5 Quick Controls2"
+install_package "libqt5widgets5" "Qt5 Widgets библиотека"
+install_package "libqt5network5" "Qt5 Network библиотека"
 
 # 📦 Устанавливаем PostgreSQL
 echo ""
@@ -63,6 +84,7 @@ echo "📥 Устанавливаем PostgreSQL..."
 install_package "postgresql" "PostgreSQL сервер"
 install_package "postgresql-contrib" "PostgreSQL дополнения"
 install_package "libpq-dev" "PostgreSQL разработка"
+install_package "libpq5" "PostgreSQL клиентская библиотека"
 
 # 📦 Устанавливаем Protocol Buffers
 echo ""
@@ -70,6 +92,17 @@ echo "📥 Устанавливаем Protocol Buffers..."
 
 install_package "protobuf-compiler" "Protobuf компилятор"
 install_package "libprotobuf-dev" "Protobuf библиотеки"
+install_package "libprotoc-dev" "Protobuf компилятор разработка"
+
+# 📦 Устанавливаем дополнительные системные библиотеки
+echo ""
+echo "📥 Устанавливаем системные библиотеки..."
+
+install_package "libgl1-mesa-dev" "OpenGL библиотеки"
+install_package "libglu1-mesa-dev" "GLU библиотеки"
+install_package "freeglut3-dev" "GLUT библиотеки"
+install_package "libx11-dev" "X11 разработка"
+install_package "libxext-dev" "Xext библиотеки"
 
 # 🔧 Проверяем установленные компоненты
 echo ""
@@ -80,6 +113,26 @@ check_command "cmake" "CMake"
 check_command "qmake" "Qt5 qmake"
 check_command "protoc" "Protobuf компилятор"
 check_command "psql" "PostgreSQL клиент"
+
+# Проверяем QML модули
+echo ""
+echo "🔍 Проверяем QML модули..."
+
+QML_MODULES=(
+    "QtQuick"
+    "QtQuick.Controls"
+    "QtQuick.Layouts" 
+    "QtQuick.Window"
+    "QtQuick.Templates"
+)
+
+for module in "${QML_MODULES[@]}"; do
+    if qmlimportscanner | grep -q "$module"; then
+        echo "✅ QML модуль $module доступен"
+    else
+        echo "⚠️ QML модуль $module не найден"
+    fi
+done
 
 # 🔧 Настраиваем локаль для правильной кодировки
 echo ""
@@ -188,6 +241,8 @@ if cmake ..; then
     echo "✅ CMake конфигурация успешна"
 else
     echo "❌ Ошибка CMake конфигурации"
+    # Показываем детальную ошибку
+    cmake .. --debug-output
     exit 1
 fi
 
@@ -221,12 +276,37 @@ Categories=Office;
 Terminal=false
 EOF
 
+# Создаем ярлык на рабочем столе
+echo "🖥️ Создаем ярлык на рабочем столе..."
+cat > ~/Desktop/FridgeManager.desktop << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FridgeManager
+Comment=Учет продуктов ресторана
+Exec=fridgemanager
+Icon=utilities-system-monitor
+Categories=Office;
+Terminal=false
+EOF
+chmod +x ~/Desktop/FridgeManager.desktop
+
 echo ""
 echo "🎉 Установка завершена!"
 echo "👤 Создан пользователь PostgreSQL: $CURRENT_USER"
 echo "💡 Приложение подключится как: $CURRENT_USER"
 echo "📁 Исполняемый файл: /usr/bin/fridgemanager"
 echo "🖥️  Ярлык: Меню приложений → FridgeManager"
+echo "🖥️  Ярлык: Рабочий стол → FridgeManager"
 echo "➡️  Запустите: fridgemanager"
 echo "   или найдите в меню приложений"
 echo "=========================================="
+
+# 🔧 Запускаем приложение (опционально)
+echo ""
+read -p "🚀 Запустить FridgeManager сейчас? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Запускаем FridgeManager..."
+    fridgemanager
+fi
